@@ -3,5 +3,8 @@
     "description": "Collection of useful Claude tools.",
     "author": {
         "name": "Tadej Slivnik"
-    }
+    },
+    "homepage": "https://github.com/TadejSlivnik/claude-skills",
+    "repository": "https://github.com/TadejSlivnik/claude-skills",
+    "license": "MIT"
 }

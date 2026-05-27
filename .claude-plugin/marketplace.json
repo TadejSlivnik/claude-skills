@@ -1,0 +1,23 @@
+{
+    "name": "ts-skills",
+    "owner": {
+        "name": "Tadej Slivnik"
+    },
+    "metadata": {
+        "description": "Tadej Slivnik's Claude Code plugins."
+    },
+    "plugins": [
+        {
+            "name": "ts-skills",
+            "source": ".",
+            "description": "Collection of useful Claude tools.",
+            "version": "1.0.0",
+            "author": {
+                "name": "Tadej Slivnik"
+            },
+            "homepage": "https://github.com/TadejSlivnik/claude-skills",
+            "repository": "https://github.com/TadejSlivnik/claude-skills",
+            "license": "MIT"
+        }
+    ]
+}
