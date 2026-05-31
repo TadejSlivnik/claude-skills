@@ -1,6 +1,6 @@
 {
-    "name": "ts-skills",
-    "description": "Collection of useful Claude tools.",
+    "name": "planning",
+    "description": "Skills for stress-testing plans and designs through structured questioning.",
     "author": {
         "name": "Tadej Slivnik"
     },

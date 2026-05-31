@@ -1,0 +1,10 @@
+{
+    "name": "git-tools",
+    "description": "Helpers for everyday git workflows.",
+    "author": {
+        "name": "Tadej Slivnik"
+    },
+    "homepage": "https://github.com/TadejSlivnik/claude-skills",
+    "repository": "https://github.com/TadejSlivnik/claude-skills",
+    "license": "MIT"
+}

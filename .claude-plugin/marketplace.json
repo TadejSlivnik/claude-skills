@@ -8,9 +8,14 @@
     },
     "plugins": [
         {
-            "name": "ts-skills",
-            "source": "./.",
-            "description": "Collection of useful Claude tools."
+            "name": "planning",
+            "source": "./plugins/planning",
+            "description": "Skills for stress-testing plans and designs through structured questioning."
+        },
+        {
+            "name": "git-tools",
+            "source": "./plugins/git-tools",
+            "description": "Helpers for everyday git workflows."
         }
     ]
 }
