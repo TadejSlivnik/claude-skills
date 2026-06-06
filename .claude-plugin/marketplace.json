@@ -16,6 +16,12 @@
             "name": "git-tools",
             "source": "./plugins/git-tools",
             "description": "Helpers for everyday git workflows."
+        },
+        {
+            "name": "experimental",
+            "source": "./plugins/experimental",
+            "description": "Untested, in-development skills under evaluation. Not for general use — skills graduate to another plugin once verified.",
+            "defaultEnabled": false
         }
     ]
 }

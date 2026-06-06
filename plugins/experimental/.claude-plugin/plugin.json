@@ -1,0 +1,10 @@
+{
+    "name": "experimental",
+    "description": "Untested, in-development skills under evaluation. Not for general use — skills graduate to another plugin once verified.",
+    "author": {
+        "name": "Tadej Slivnik"
+    },
+    "homepage": "https://github.com/TadejSlivnik/claude-skills",
+    "repository": "https://github.com/TadejSlivnik/claude-skills",
+    "license": "MIT"
+}
