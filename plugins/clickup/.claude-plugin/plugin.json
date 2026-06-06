@@ -1,0 +1,10 @@
+{
+    "name": "clickup",
+    "description": "Read and write ClickUp tasks and docs by ID or URL — get, create, update, close, and reassign tasks, and read or create docs.",
+    "author": {
+        "name": "Tadej Slivnik"
+    },
+    "homepage": "https://github.com/TadejSlivnik/claude-skills",
+    "repository": "https://github.com/TadejSlivnik/claude-skills",
+    "license": "MIT"
+}
