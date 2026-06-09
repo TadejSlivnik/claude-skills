@@ -11,6 +11,10 @@ description: Simplifies code for clarity. Use when refactoring code for clarity 
 
 Simplify code by reducing complexity while preserving exact behavior. The goal is not fewer lines — it's code that is easier to read, understand, modify, and debug. Every simplification must pass a simple test: "Would a new team member understand this faster than the original?"
 
+The principles and process here are language- and framework-agnostic. They apply to any language (TypeScript, Python, Go, Rust, Java, …) and any framework or none.
+
+> **About the code examples:** Examples are written in a handful of common languages and one component framework (React) because concrete code communicates the idea faster than prose. They are *illustrations of the principle, not a mandate to use that language or framework.* The transformation each one shows — guard clauses, named intermediates, removing dead abstraction — translates directly to whatever stack you're in. Always match the conventions already present in the codebase you're working in.
+
 ## When to Use
 
 - After a feature is working and tests pass, but the implementation feels heavier than it needs to be
@@ -270,7 +274,9 @@ def process(data):
     return do_work(data)
 ```
 
-### React / JSX
+### Component frameworks (React / JSX shown)
+
+The patterns below are illustrated in React, but the underlying simplifications — collapsing duplicated branches in rendered output, and lifting shared state instead of drilling props — apply equally to Vue, Svelte, Angular, SolidJS, or Web Components. Translate the syntax; keep the move.
 
 ```tsx
 // SIMPLIFY: Verbose conditional rendering

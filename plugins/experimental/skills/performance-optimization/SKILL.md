@@ -9,6 +9,10 @@ description: Optimizes application performance. Use when performance requirement
 
 Measure before optimizing. Performance work without measurement is guessing — and guessing leads to premature optimization that adds complexity without improving what matters. Profile first, identify the actual bottleneck, fix it, measure again. Optimize only what measurements prove matters.
 
+The workflow and the anti-patterns here are framework-agnostic. They apply to any backend (Node, Python, Go, Java, …), any ORM or query layer, any frontend framework, and any bundler.
+
+> **About the code examples:** Examples use specific tools — an ORM with Prisma-style syntax, an Express server, React, a JS bundler — because concrete code names the fix faster than prose. They are *illustrations of the principle, not a mandate to use those tools.* Each anti-pattern below states the underlying principle so you can apply it with your own stack's equivalent (eager-loading vs. N+1, pagination, memoization, code splitting, caching headers). Always measure with the profiling tools native to your platform, and match the conventions of the codebase you're in.
+
 ## When to Use
 
 - Performance requirements exist in the spec (load time budgets, response time SLAs)
@@ -122,6 +126,8 @@ Common bottlenecks by category:
 
 #### N+1 Queries (Backend)
 
+*Principle:* fetch related data in a single query (a join or eager-load) instead of one query per row. This holds for any data layer — raw SQL, an ORM, or a GraphQL resolver (where a DataLoader-style batcher plays the same role). The ORM syntax below is illustrative.
+
 ```typescript
 // BAD: N+1 — one query per task for the owner
 const tasks = await db.tasks.findMany();
@@ -136,6 +142,8 @@ const tasks = await db.tasks.findMany({
 ```
 
 #### Unbounded Data Fetching
+
+*Principle:* never fetch an unbounded result set; always cap with a limit and paginate (offset- or cursor-based). The ORM call is illustrative — the same applies to a `LIMIT`/`OFFSET` in raw SQL or a paged API endpoint.
 
 ```typescript
 // BAD: Fetching all records
@@ -214,7 +222,9 @@ const tasks = await db.tasks.findMany({
 />
 ```
 
-#### Unnecessary Re-renders (React)
+#### Unnecessary Re-renders (component frameworks; React shown)
+
+*Principle:* avoid creating fresh references (objects, arrays, callbacks) on every render when a child relies on referential equality, and memoize genuinely expensive computations. Every reactive framework has its own version of this — Vue's `computed`, Svelte's derived stores, Angular's `OnPush` + signals, Solid's fine-grained reactivity. React's `memo`/`useMemo` are shown here.
 
 ```tsx
 // BAD: Creates new object on every render, causing children to re-render
@@ -242,6 +252,8 @@ function TaskStats({ tasks }: Props) {
 
 #### Large Bundle Size
 
+*Principle:* ship less JavaScript up front — rely on tree-shaking, then split heavy or rarely-used code so it loads on demand. The lazy-import + Suspense pattern below is React, but every framework has a code-splitting equivalent (Vue `defineAsyncComponent`, SvelteKit route-level splitting, Angular lazy-loaded routes, or a bare dynamic `import()`).
+
 ```typescript
 // Modern bundlers (Vite, webpack 5+) handle named imports with tree-shaking automatically,
 // provided the dependency ships ESM and is marked `sideEffects: false` in package.json.
@@ -263,6 +275,8 @@ function App() {
 ```
 
 #### Missing Caching (Backend)
+
+*Principle:* cache frequently-read, rarely-changed data (in-memory or a shared cache like Redis), and set HTTP cache headers so clients and CDNs avoid redundant round-trips. The in-memory cache and Express middleware below are illustrative — the headers and the TTL strategy apply to any server framework.
 
 ```typescript
 // Cache frequently-read, rarely-changed data
