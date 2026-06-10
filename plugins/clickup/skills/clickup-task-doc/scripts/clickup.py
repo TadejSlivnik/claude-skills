@@ -146,11 +146,24 @@ def parse_task_ref(raw):
     return task, team
 
 
+def list_entry_id(entry):
+    """A profile.lists entry is either a bare id or {"id", "default_tags", "note"}."""
+    return str(entry["id"]) if isinstance(entry, dict) else str(entry)
+
+
+def list_default_tags(list_id, profile):
+    """default_tags of the profile.lists entry whose id matches, else []."""
+    for entry in (profile.get("lists") or {}).values():
+        if isinstance(entry, dict) and str(entry.get("id")) == str(list_id):
+            return [str(t) for t in entry.get("default_tags") or []]
+    return []
+
+
 def resolve_list(value, profile):
     """alias in profile.lists -> id; URL -> id after /li/ or /l/; else raw id."""
     lists = profile.get("lists") or {}
     if value in lists:
-        return str(lists[value])
+        return list_entry_id(lists[value])
     if value.startswith("http"):
         segs = value.split("?")[0].rstrip("/").split("/")
         for marker in ("li", "l"):
@@ -210,7 +223,8 @@ def task_create(argv):
     if not f.get("list") or not f.get("name"):
         sys.exit('Usage: clickup.py task create --list <alias|id|url> --name "<title>" '
                  "[--profile p] [--content-file path] [--priority N] [--status S] "
-                 "[--tags a,b] [--assignees me|id,...|none] [--due ms] [--dry-run]")
+                 "[--tags a,b] [--no-default-tags] [--assignees me|id,...|none] "
+                 "[--due ms] [--dry-run]")
 
     cfg = load_config()
     prof = resolve_profile(cfg, f.get("profile"), None)
@@ -224,8 +238,11 @@ def task_create(argv):
         body["status"] = f["status"]
     if f.get("priority"):
         body["priority"] = int(f["priority"])
-    if f.get("tags"):
-        body["tags"] = [t.strip() for t in f["tags"].split(",") if t.strip()]
+    tags = [t.strip() for t in (f.get("tags") or "").split(",") if t.strip()]
+    if not f.get("no-default-tags"):
+        tags += [t for t in list_default_tags(list_id, prof) if t not in tags]
+    if tags:
+        body["tags"] = tags
     # Assignee resolution: default to the token owner ("me") unless the caller
     # opts out with `--assignees none`. `me` (alone or in a list) resolves to
     # the token owner; everything else is treated as a numeric user id.

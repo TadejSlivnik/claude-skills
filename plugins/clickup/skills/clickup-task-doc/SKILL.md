@@ -19,7 +19,10 @@ This file is outside the skill dir on purpose — the skill dir syncs to git.
     "work": {
       "token": "pk_...",
       "team_id": "9000...",
-      "lists":       { "backlog": "901100..." },                   // optional, for task create
+      "lists": {                                                    // optional, for task create
+        "backlog": "901100...",                                     // bare id, or:
+        "bugs": { "id": "901101...", "default_tags": ["bug"], "note": "production defects" }
+      },
       "doc_parents": { "specs":   { "id": "90110...", "type": 4 } } // optional, for doc create
     },
     "personal": { "token": "pk_...", "team_id": "9001..." }
@@ -45,7 +48,8 @@ required fields, then write the file:
 - **team_id** (required for custom task IDs and all Doc ops) — workspace id.
 - **profile name** — default to `work` if they only have one.
 - **lists** / **doc_parents** — optional; ask only if they want to set up
-  `task create` / `doc create` now (they can add these later).
+  `task create` / `doc create` now (they can add these later). For each list
+  they configure, also ask about default tags (see below).
 
 Write with `0600` permissions and confirm the path back to the user. Never echo
 the token in your confirmation.
@@ -53,16 +57,21 @@ the token in your confirmation.
 ### When the user supplies list or doc_parent ids
 
 Whenever the user gives a `lists` entry or a `doc_parents` entry (now or later),
-**ask what that list/parent is used for** and record it as a short comment on
-the JSON entry. This context lets you route future `task create` / `doc create`
-calls to the right place without asking again. For example:
+ask two things and record the answers on the entry:
 
-```jsonc
-"lists": {
-  "backlog": "901100...",  // unscheduled feature work, triaged weekly
-  "bugs":    "901101..."   // production defects, ops triages daily
-}
-```
+1. **What is this list/parent used for?** Store it in the entry's `note` field.
+   This context lets you route future `task create` / `doc create` calls to the
+   right place without asking again. (Don't use `//` comments — the file is
+   parsed as strict JSON.)
+2. **(lists only) Should any tags be added by default to tasks created in this
+   list?** If yes, store them in the entry's `default_tags` array; if no, write
+   `"default_tags": []` so you know the question was already answered and don't
+   ask again.
+
+A `lists` entry with either field uses the object form
+`{ "id": "...", "default_tags": [...], "note": "..." }` instead of a bare id
+string (see the schema above). Ask the same two questions when the user has you
+edit an existing entry that's missing them.
 
 ## Profile resolution (applies to every command)
 
@@ -104,10 +113,17 @@ unassigned, `--assignees me` to be explicit, or a comma list of numeric ids
 (the literal `me` may appear in the list and resolves to the token owner). Only
 pass `--assignees` when the user names a different assignee or asks for none.
 
+**Default tags**: when the target list's `profiles.json` entry has
+`default_tags`, the script automatically merges them into the created task's
+tags (deduplicated with any `--tags` you pass) — you don't need to do anything.
+Pass `--no-default-tags` only when the user explicitly says not to tag the
+task with them. Default tags apply to `task create` only, never to
+`task update`.
+
 ```bash
 python3 scripts/clickup.py task create --list <alias|id|url> --name "<title>" \
   --content-file /tmp/clickup_task.md [--profile p] [--priority N] [--status S] \
-  [--tags a,b] [--assignees me|id,...|none]
+  [--tags a,b] [--no-default-tags] [--assignees me|id,...|none]
 
 python3 scripts/clickup.py doc create --name "<title>" \
   --content-file /tmp/clickup_doc.md [--profile p] [--parent <alias>]
