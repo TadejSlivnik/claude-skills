@@ -23,6 +23,11 @@
             "description": "Read and write ClickUp tasks and docs by ID or URL — get, create, update, close, and reassign tasks, and read or create docs."
         },
         {
+            "name": "code",
+            "source": "./plugins/code",
+            "description": "Skills for writing, reviewing, and hardening code — security, performance, simplification, multi-axis review, and requirement-extraction interviews."
+        },
+        {
             "name": "experimental",
             "source": "./plugins/experimental",
             "description": "Untested, in-development skills under evaluation. Not for general use — skills graduate to another plugin once verified.",

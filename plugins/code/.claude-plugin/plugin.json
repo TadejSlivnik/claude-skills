@@ -1,0 +1,10 @@
+{
+    "name": "code",
+    "description": "Skills for writing, reviewing, and hardening code — security, performance, simplification, multi-axis review, and requirement-extraction interviews.",
+    "author": {
+        "name": "Tadej Slivnik"
+    },
+    "homepage": "https://github.com/TadejSlivnik/claude-skills",
+    "repository": "https://github.com/TadejSlivnik/claude-skills",
+    "license": "MIT"
+}
