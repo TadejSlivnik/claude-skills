@@ -9,7 +9,7 @@ description: Simplifies code for clarity. Use when refactoring code for clarity 
 
 ## Overview
 
-Simplify code by reducing complexity while preserving exact behavior. The goal is not fewer lines — it's code that is easier to read, understand, modify, and debug. Every simplification must pass a simple test: "Would a new team member understand this faster than the original?"
+Simplify code by reducing complexity while preserving exact behavior. The goal is not fewer lines — it's code that is easier to read, understand, modify, and debug. Every simplification must pass two tests: "Would a new team member understand this faster than the original?" **and** "Is the improvement big enough to be worth the diff?" A change that passes the first but not the second is churn — and finding that the code has no changes worth making is a successful outcome, not a failed one.
 
 The principles and process here are language- and framework-agnostic. They apply to any language (TypeScript, Python, Go, Rust, Java, …) and any framework or none.
 
@@ -31,7 +31,7 @@ The principles and process here are language- and framework-agnostic. They apply
 - The code is performance-critical and the "simpler" version would be measurably slower
 - You're about to rewrite the module entirely — simplifying throwaway code wastes effort
 
-## The Five Principles
+## Core Principles
 
 ### 1. Preserve Behavior Exactly
 
@@ -106,6 +106,14 @@ Simplification has a failure mode: over-simplification. Watch for these traps:
 
 Default to simplifying recently modified code. Avoid drive-by refactors of unrelated code unless explicitly asked to broaden scope. Unscoped simplification creates noise in diffs and risks unintended regressions.
 
+### 6. Earn the Diff — Leverage Over Activity
+
+A simplification must earn the change it introduces. Before applying anything, ask whether it *measurably* improves comprehension — not merely whether it's technically an improvement. Removing a small duplication of code that rarely changes, renaming one local variable, collapsing a short block: each is real but marginal, and a diff made of marginal changes is churn dressed up as progress.
+
+Rank what you found by **leverage** — roughly, how much easier the code becomes to understand × how often someone reads or changes it. A 13-line dedup of a mapping that changes once a year is low leverage. Untangling a function people fear to touch is high leverage. Apply the high-leverage changes; for the rest, the correct output is usually to leave the code alone and say so.
+
+**"I found nothing worth changing" is a valid, successful result.** Being invoked is not a mandate to produce a diff. Never manufacture a change to justify the run — if the only candidates are cosmetic, report that the changed code is already clean and stop. Surfacing a higher-leverage opportunity you chose *not* to take (because it's risky or out of scope) is more useful to the user than shipping a marginal one.
+
 ## The Simplification Process
 
 ### Step 1: Understand Before Touching (Chesterton's Fence)
@@ -158,7 +166,24 @@ Scan for these patterns — each one is a concrete signal, not a vague smell:
 | Over-engineered patterns | Factory-for-a-factory, strategy-with-one-strategy | Replace with the simple direct approach |
 | Redundant type assertions | Casting to a type that's already inferred | Remove the assertion |
 
-### Step 3: Apply Changes Incrementally
+### Step 3: Triage by Leverage — Decide Whether to Proceed
+
+Before touching anything, rank the candidates from Step 2 by leverage and apply a threshold. This is the gate that stops marginal work from shipping.
+
+```
+FOR THE CANDIDATES YOU FOUND:
+1. Rank by leverage: comprehension gain × how often the code is read/changed
+2. Draw the line: which candidates clear "worth the diff", which are cosmetic?
+3. If the BEST candidate is still marginal → STOP. Report that the code is
+   already clean and name what you considered but rejected. Do not apply it.
+4. If a high-leverage candidate is risky or out of scope → describe it to the
+   user and let them choose, rather than silently shipping a safe-but-marginal
+   change instead.
+```
+
+A run that ends with "the changed code is already clean — the only opportunities were cosmetic, so I made no changes" is a good run. Resist the pull to apply *something* just because the skill was invoked.
+
+### Step 4: Apply Changes Incrementally
 
 Make one simplification at a time. Run tests after each change. **Submit refactoring changes separately from feature or bug fix changes.** A PR that refactors and adds a feature is two PRs — split them.
 
@@ -174,7 +199,7 @@ Avoid batching multiple simplifications into a single untested change. If someth
 
 **The Rule of 500:** If a refactoring would touch more than 500 lines, invest in automation (codemods, sed scripts, AST transforms) rather than making the changes by hand. Manual edits at that scale are error-prone and exhausting to review.
 
-### Step 4: Verify the Result
+### Step 5: Verify the Result
 
 After all simplifications, step back and evaluate the whole:
 
@@ -311,6 +336,8 @@ function UserBadge({ user }: Props) {
 | "This abstraction might be useful later" | Don't preserve speculative abstractions. If it's not used now, it's complexity without value. Remove it and re-add when needed. |
 | "The original author must have had a reason" | Maybe. Check git blame — apply Chesterton's Fence. But accumulated complexity often has no reason; it's just the residue of iteration under pressure. |
 | "I'll refactor while adding this feature" | Separate refactoring from feature work. Mixed changes are harder to review, revert, and understand in history. |
+| "It removes a duplication / a few lines, so it's worth doing" | Not automatically. Weigh the gain against the diff and how often the code changes. A small dedup of rarely-touched code is low leverage — real, but not worth shipping on its own. |
+| "I was asked to simplify, so I have to produce a change" | No. Being invoked is not a mandate to edit. If the code is already clean, the right deliverable is "nothing worth changing" plus what you considered. A forced marginal diff wastes review time and erodes trust. |
 
 ## Red Flags
 
@@ -321,6 +348,8 @@ function UserBadge({ user }: Props) {
 - Simplifying code you don't fully understand
 - Batching many simplifications into one large, hard-to-review commit
 - Refactoring code outside the scope of the current task without being asked
+- Shipping a marginal change (a small dedup, a single rename) and presenting it as a meaningful improvement — when the honest summary is "this barely helps"
+- Applying *something* because the skill was invoked, instead of reporting that the code is already clean
 
 ## Verification
 
@@ -335,3 +364,4 @@ After completing a simplification pass:
 - [ ] No error handling was removed or weakened
 - [ ] No dead code was left behind (unused imports, unreachable branches)
 - [ ] A teammate or review agent would approve the change as a net improvement
+- [ ] Every change applied clears the leverage bar — no marginal/cosmetic edits shipped just to produce a diff (if the code was already clean, the result is "no changes", reported honestly)
