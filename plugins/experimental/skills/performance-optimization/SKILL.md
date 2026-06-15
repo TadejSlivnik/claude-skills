@@ -23,6 +23,16 @@ The workflow and the anti-patterns here are framework-agnostic. They apply to an
 
 **When NOT to use:** Don't optimize before you have evidence of a problem. Premature optimization adds complexity that costs more than the performance it gains.
 
+## Scope: What to Optimize
+
+When the user gives no explicit target (no file, module, endpoint, or symptom), don't ask reflexively — infer the scope from the working state:
+
+1. **Uncommitted changes exist** (`git status` shows staged/unstaged work) → scope to those changes.
+2. **Otherwise, on a feature branch** → scope to the changes on this branch versus its base (`git diff <base>...HEAD`).
+3. **On `master`/`main`** with nothing uncommitted → **ask** what to look at. These shared branches have no meaningful "current change" to anchor on, so guessing wastes effort.
+
+State the scope you inferred in one line before profiling (e.g. "Optimizing the uncommitted changes in `api/tasks.ts`"), so the user can redirect if it's wrong. An explicit directive from the user always overrides this default.
+
 ## Core Web Vitals Targets
 
 | Metric | Good | Needs Improvement | Poor |
