@@ -7,7 +7,9 @@ description: Hardens code against vulnerabilities. Use when handling user input,
 
 ## Overview
 
-Security-first development practices for web applications. Treat every external input as hostile, every secret as sacred, and every authorization check as mandatory. Security isn't a phase — it's a constraint on every line of code that touches user data, authentication, or external systems.
+Security-first development practices for applications and services. Treat every external input as hostile, every secret as sacred, and every authorization check as mandatory. Security isn't a phase — it's a constraint on every line of code that touches user data, authentication, or external systems.
+
+> **About the code examples:** Examples are written as language-neutral pseudocode (with a few illustrative library/tool names). They are *illustrations of the principle, not a mandate to use a particular language, framework, or library.* Each pattern names the underlying concept — parameterized queries, output encoding, schema validation, rate limiting — so you can apply it with your own stack's equivalent. Always match the conventions already present in the codebase you're working in.
 
 ## When to Use
 
@@ -28,8 +30,8 @@ Security-first development practices for web applications. Treat every external 
 - **Use HTTPS** for all external communication
 - **Hash passwords** with bcrypt/scrypt/argon2 (never store plaintext)
 - **Set security headers** (CSP, HSTS, X-Frame-Options, X-Content-Type-Options)
-- **Use httpOnly, secure, sameSite cookies** for sessions
-- **Run `npm audit`** (or equivalent) before every release
+- **Use httpOnly, secure, sameSite cookies** for sessions (or the equivalent secure-token mechanism for your platform)
+- **Audit dependencies** with your ecosystem's audit tool before every release
 
 ### Ask First (Requires Human Approval)
 
@@ -47,178 +49,159 @@ Security-first development practices for web applications. Treat every external 
 - **Never log sensitive data** (passwords, tokens, full credit card numbers)
 - **Never trust client-side validation** as a security boundary
 - **Never disable security headers** for convenience
-- **Never use `eval()` or `innerHTML`** with user-provided data
-- **Never store sessions in client-accessible storage** (localStorage for auth tokens)
+- **Never feed user-provided data to dynamic code execution** (`eval` and friends) or raw markup/HTML sinks
+- **Never store sessions in client-accessible storage** (e.g. browser localStorage for auth tokens)
 - **Never expose stack traces** or internal error details to users
 
 ## OWASP Top 10 Prevention
 
 ### 1. Injection (SQL, NoSQL, OS Command)
 
-```typescript
-// BAD: SQL injection via string concatenation
-const query = `SELECT * FROM users WHERE id = '${userId}'`;
+```
+# BAD: SQL injection via string concatenation
+query = "SELECT * FROM users WHERE id = '" + userId + "'"
 
-// GOOD: Parameterized query
-const user = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
+# GOOD: Parameterized query — user input is bound, never interpolated
+user = db.query("SELECT * FROM users WHERE id = ?", [userId])
 
-// GOOD: ORM with parameterized input
-const user = await prisma.user.findUnique({ where: { id: userId } });
+# GOOD: A query builder / ORM that parameterizes input for you
+user = users.findUnique(where = { id: userId })
 ```
 
 ### 2. Broken Authentication
 
-```typescript
-// Password hashing
-import { hash, compare } from 'bcrypt';
+```
+# Password hashing — use a slow, salted KDF (bcrypt / scrypt / argon2)
+SALT_ROUNDS = 12
+hashedPassword = hash(plaintext, SALT_ROUNDS)
+isValid       = verify(plaintext, hashedPassword)
 
-const SALT_ROUNDS = 12;
-const hashedPassword = await hash(plaintext, SALT_ROUNDS);
-const isValid = await compare(plaintext, hashedPassword);
-
-// Session management
-app.use(session({
-  secret: process.env.SESSION_SECRET,  // From environment, not code
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,     // Not accessible via JavaScript
-    secure: true,       // HTTPS only
-    sameSite: 'lax',    // CSRF protection
-    maxAge: 24 * 60 * 60 * 1000,  // 24 hours
-  },
-}));
+# Session cookie configuration
+configureSession({
+    secret: env["SESSION_SECRET"],   # From environment, not code
+    cookie: {
+        httpOnly: true,    # Not accessible to client-side scripts
+        secure:   true,    # Sent over HTTPS only
+        sameSite: "lax",   # CSRF protection
+        maxAge:   24 hours,
+    },
+})
 ```
 
 ### 3. Cross-Site Scripting (XSS)
 
-```typescript
-// BAD: Rendering user input as HTML
-element.innerHTML = userInput;
+```
+# BAD: Rendering user input into a raw markup/HTML sink
+element.rawHtml = userInput
 
-// GOOD: Use framework auto-escaping (React does this by default)
-return <div>{userInput}</div>;
+# GOOD: Render through the framework's auto-escaping output path
+#       (most templating/UI layers escape interpolated values by default)
+render(text = userInput)
 
-// If you MUST render HTML, sanitize first
-import DOMPurify from 'dompurify';
-const clean = DOMPurify.sanitize(userInput);
+# If you MUST render user-supplied HTML, sanitize with an allowlist first
+clean = htmlSanitizer.sanitize(userInput)
 ```
 
 ### 4. Broken Access Control
 
-```typescript
-// Always check authorization, not just authentication
-app.patch('/api/tasks/:id', authenticate, async (req, res) => {
-  const task = await taskService.findById(req.params.id);
+```
+# Always check authorization, not just authentication.
+# Handler runs only after the request is authenticated.
+handler updateTask(request):
+    task = taskService.findById(request.params.id)
 
-  // Check that the authenticated user owns this resource
-  if (task.ownerId !== req.user.id) {
-    return res.status(403).json({
-      error: { code: 'FORBIDDEN', message: 'Not authorized to modify this task' }
-    });
-  }
+    # Check that the authenticated user owns this resource
+    if task.ownerId != request.user.id:
+        return respond(403, { error: { code: "FORBIDDEN",
+                                       message: "Not authorized to modify this task" } })
 
-  // Proceed with update
-  const updated = await taskService.update(req.params.id, req.body);
-  return res.json(updated);
-});
+    # Proceed with update
+    updated = taskService.update(request.params.id, request.body)
+    return respond(200, updated)
 ```
 
 ### 5. Security Misconfiguration
 
-```typescript
-// Security headers (use helmet for Express)
-import helmet from 'helmet';
-app.use(helmet());
+```
+# Apply standard security response headers
+#   (HSTS, X-Frame-Options, X-Content-Type-Options, etc.)
+useSecurityHeaders()
 
-// Content Security Policy
-app.use(helmet.contentSecurityPolicy({
-  directives: {
-    defaultSrc: ["'self'"],
-    scriptSrc: ["'self'"],
-    styleSrc: ["'self'", "'unsafe-inline'"],  // Tighten if possible
-    imgSrc: ["'self'", 'data:', 'https:'],
-    connectSrc: ["'self'"],
-  },
-}));
+# Content Security Policy — allowlist where resources may load from
+setContentSecurityPolicy({
+    defaultSrc: ["self"],
+    scriptSrc:  ["self"],
+    styleSrc:   ["self", "unsafe-inline"],   # Tighten if possible
+    imgSrc:     ["self", "data:", "https:"],
+    connectSrc: ["self"],
+})
 
-// CORS — restrict to known origins
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || 'http://localhost:3000',
-  credentials: true,
-}));
+# CORS — restrict to known origins (never a wildcard with credentials)
+setCors({
+    origin:      env["ALLOWED_ORIGINS"].split(",") or ["https://app.example.com"],
+    credentials: true,
+})
 ```
 
 ### 6. Sensitive Data Exposure
 
-```typescript
-// Never return sensitive fields in API responses
-function sanitizeUser(user: UserRecord): PublicUser {
-  const { passwordHash, resetToken, ...publicFields } = user;
-  return publicFields;
-}
+```
+# Never return sensitive fields in API responses — allowlist what's public
+function sanitizeUser(user):
+    return pick(user, ["id", "name", "email"])   # omit passwordHash, resetToken, ...
 
-// Use environment variables for secrets
-const API_KEY = process.env.STRIPE_API_KEY;
-if (!API_KEY) throw new Error('STRIPE_API_KEY not configured');
+# Use environment/secret store for secrets, never hard-code them
+API_KEY = env["PAYMENT_API_KEY"]
+if API_KEY is missing:
+    fail("PAYMENT_API_KEY not configured")
 ```
 
 ## Input Validation Patterns
 
 ### Schema Validation at Boundaries
 
-```typescript
-import { z } from 'zod';
+```
+# Declare a schema describing exactly what valid input looks like
+CreateTaskSchema = schema({
+    title:       string, required, length 1..200, trimmed,
+    description: string, optional, max length 2000,
+    priority:    one_of("low", "medium", "high"), default "medium",
+    dueDate:     timestamp, optional,
+})
 
-const CreateTaskSchema = z.object({
-  title: z.string().min(1).max(200).trim(),
-  description: z.string().max(2000).optional(),
-  priority: z.enum(['low', 'medium', 'high']).default('medium'),
-  dueDate: z.string().datetime().optional(),
-});
-
-// Validate at the route handler
-app.post('/api/tasks', async (req, res) => {
-  const result = CreateTaskSchema.safeParse(req.body);
-  if (!result.success) {
-    return res.status(422).json({
-      error: {
-        code: 'VALIDATION_ERROR',
-        message: 'Invalid input',
-        details: result.error.flatten(),
-      },
-    });
-  }
-  // result.data is now typed and validated
-  const task = await taskService.create(result.data);
-  return res.status(201).json(task);
-});
+# Validate at the boundary (the request handler), before any business logic
+handler createTask(request):
+    result = CreateTaskSchema.validate(request.body)
+    if not result.ok:
+        return respond(422, { error: { code: "VALIDATION_ERROR",
+                                       message: "Invalid input",
+                                       details: result.errors } })
+    # result.value is now validated and safe to use
+    task = taskService.create(result.value)
+    return respond(201, task)
 ```
 
 ### File Upload Safety
 
-```typescript
-// Restrict file types and sizes
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+```
+# Restrict file types and sizes
+ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"]
+MAX_SIZE      = 5 MB
 
-function validateUpload(file: UploadedFile) {
-  if (!ALLOWED_TYPES.includes(file.mimetype)) {
-    throw new ValidationError('File type not allowed');
-  }
-  if (file.size > MAX_SIZE) {
-    throw new ValidationError('File too large (max 5MB)');
-  }
-  // Don't trust the file extension — check magic bytes if critical
-}
+function validateUpload(file):
+    if file.mimetype not in ALLOWED_TYPES:
+        fail("File type not allowed")
+    if file.size > MAX_SIZE:
+        fail("File too large (max 5MB)")
+    # Don't trust the file extension — inspect magic bytes if critical
 ```
 
-## Triaging npm audit Results
+## Triaging Dependency Audit Results
 
 Not all audit findings require immediate action. Use this decision tree:
 
 ```
-npm audit reports a vulnerability
+A dependency audit reports a vulnerability
 ├── Severity: critical or high
 │   ├── Is the vulnerable code reachable in your app?
 │   │   ├── YES --> Fix immediately (update, patch, or replace the dependency)
@@ -242,22 +225,18 @@ When you defer a fix, document the reason and set a review date.
 
 ## Rate Limiting
 
-```typescript
-import rateLimit from 'express-rate-limit';
+```
+# General API rate limit
+rateLimit(path = "/api/", {
+    window: 15 minutes,
+    max:    100,            # 100 requests per window per client
+})
 
-// General API rate limit
-app.use('/api/', rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,                   // 100 requests per window
-  standardHeaders: true,
-  legacyHeaders: false,
-}));
-
-// Stricter limit for auth endpoints
-app.use('/api/auth/', rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,  // 10 attempts per 15 minutes
-}));
+# Stricter limit for auth endpoints (slows credential-stuffing/brute force)
+rateLimit(path = "/api/auth/", {
+    window: 15 minutes,
+    max:    10,             # 10 attempts per 15 minutes
+})
 ```
 
 ## Secrets Management
@@ -340,10 +319,10 @@ For detailed security checklists and pre-commit verification steps, see `referen
 
 After implementing security-relevant code:
 
-- [ ] `npm audit` shows no critical or high vulnerabilities
+- [ ] Dependency audit shows no critical or high vulnerabilities
 - [ ] No secrets in source code or git history
 - [ ] All user input validated at system boundaries
 - [ ] Authentication and authorization checked on every protected endpoint
-- [ ] Security headers present in response (check with browser DevTools)
+- [ ] Security headers present in response (inspect the response headers)
 - [ ] Error responses don't expose internal details
 - [ ] Rate limiting active on auth endpoints

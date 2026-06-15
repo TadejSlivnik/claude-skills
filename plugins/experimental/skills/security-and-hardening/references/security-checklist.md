@@ -1,8 +1,8 @@
 # Security Checklist
 
-Quick reference for web application security. Use alongside the `security-and-hardening` skill.
+Quick reference for application and service security. Use alongside the `security-and-hardening` skill.
 
-These controls are framework- and language-agnostic — the threats (injection, broken access control, SSRF, supply-chain) exist in every stack. Code snippets use JavaScript/Express and `npm` only as a compact, widely-readable illustration; each one notes the underlying principle and the equivalent in other ecosystems. Apply them with whatever your server framework and package manager provide.
+These controls are framework- and language-agnostic — the threats (injection, broken access control, SSRF, supply-chain) exist in every stack. Code snippets are written as language-neutral pseudocode that names the underlying principle; dependency-audit commands are shown per ecosystem. Apply them with whatever your server framework and package manager provide.
 
 ## Table of Contents
 
@@ -82,19 +82,19 @@ Permissions-Policy: camera=(), microphone=(), geolocation=()
 
 ## CORS Configuration
 
-The same policy fields exist in every server framework (the Express `cors` middleware is shown for brevity). The rule is universal: allowlist explicit origins, never reflect `*` when credentials are involved.
+The same policy fields exist in every server framework. The rule is universal: allowlist explicit origins, never reflect `*` when credentials are involved.
 
-```typescript
-// Restrictive (recommended) — allowlist explicit origins
-{
-  origin: ['https://yourdomain.com', 'https://app.yourdomain.com'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+```
+# Restrictive (recommended) — allowlist explicit origins
+corsPolicy = {
+    origin:         ["https://yourdomain.com", "https://app.yourdomain.com"],
+    credentials:    true,
+    methods:        ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
 }
 
-// NEVER use in production:
-{ origin: '*' }  // Allows any origin — and is invalid combined with credentials
+# NEVER use in production:
+corsPolicy = { origin: "*" }   # Allows any origin — and is invalid combined with credentials
 ```
 
 ## Data Protection
@@ -142,15 +142,15 @@ For any feature that calls an LLM (chatbots, summarizers, agents, RAG):
 
 Principle (any server framework): return a generic message + code to the client, log the detail server-side. Never serialize exception internals into the response.
 
-```typescript
-// Production: generic error, no internals
-{ error: { code: 'INTERNAL_ERROR', message: 'Something went wrong' } }
+```
+# Production: generic error, no internals
+{ error: { code: "INTERNAL_ERROR", message: "Something went wrong" } }
 
-// NEVER in production:
+# NEVER in production:
 {
-  error: err.message,
-  stack: err.stack,         // Exposes internals
-  query: err.sql,           // Exposes database details
+    error: err.message,
+    stack: err.stackTrace,   # Exposes internals
+    query: err.sqlStatement, # Exposes database details
 }
 ```
 
