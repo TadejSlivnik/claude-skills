@@ -303,6 +303,8 @@ describe('TaskService', () => {
 
 For anything that runs in a browser, unit tests alone aren't enough — you need runtime verification in a real browser. A browser-automation tool (such as a Chrome DevTools MCP server, Playwright, Puppeteer, Cypress, or Selenium) gives your agent eyes into the running page: DOM inspection, console logs, network requests, performance traces, and screenshots. The workflow below is tool-independent.
 
+This section is the **runtime debugging loop** — reproduce, inspect, and diagnose a broken page during development. Proving a user-facing *flow* works end-to-end and leaving a durable regression test behind is a distinct discipline with its own method; keep this section focused on diagnosis.
+
 ### The Debugging Workflow
 
 ```
