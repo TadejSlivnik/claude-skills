@@ -1,5 +1,6 @@
 ---
 description: Generate a one-line short commit message from staged changes
+model: haiku
 ---
 
 Run `git diff --cached` to see staged changes. If nothing is staged, also run `git diff` to see unstaged changes.

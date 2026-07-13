@@ -1,5 +1,6 @@
 ---
 description: Generate a commit message (via /cm) and commit — staged changes if any, otherwise all tracked unstaged changes
+model: haiku
 ---
 
 Generate the commit message by invoking the `git-tools:cm` skill (via the Skill tool). Reuse it as-is — do **not** restate or duplicate its message-writing rules here. Take the single-line message it returns and strip the surrounding code fence.
