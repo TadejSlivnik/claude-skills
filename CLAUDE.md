@@ -4,29 +4,44 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository purpose
 
-This repo is a Claude Code **marketplace** that hosts multiple plugins. Each plugin is a self-contained collection of skills and/or commands distributed together. There is no build, lint, or test step: skills and commands are plain markdown files that Claude Code loads at runtime.
+This repo is a Claude Code **marketplace** that hosts multiple plugins. Each plugin is a self-contained collection of skills and/or commands distributed together. There is no build, lint, or test step: skills and commands are plain markdown files (plus the occasional helper script) that Claude Code loads at runtime.
+
+Consumers install it with `/plugin marketplace add TadejSlivnik/claude-skills`, then enable individual plugins.
 
 ## Layout
 
-- `.claude-plugin/marketplace.json` — the marketplace manifest at the repo root. It lists every plugin in the `plugins[]` array. This is what gets added via `/plugin marketplace add TadejSlivnik/claude-skills`. Each entry's `source` field is a relative path to the plugin's directory, e.g. `"./plugins/planning"` (a relative path; bare `"."` fails schema validation).
-
-Current plugins: `planning` (design/plan stress-testing skills) and `git-tools` (git workflow commands).
+- `.claude-plugin/marketplace.json` — the marketplace manifest at the repo root (marketplace `name` is `ts-skills`). It lists every plugin in the `plugins[]` array. Each entry's `source` is a relative path to the plugin's directory, e.g. `"./plugins/planning"` (bare `"."` fails schema validation). An entry may set `"defaultEnabled": false` to ship a plugin that stays off until the user opts in.
 - `plugins/<plugin-name>/` — one directory per plugin. Each contains:
-  - `.claude-plugin/plugin.json` — that plugin's manifest (`name`, `description`, `author`, etc.).
-  - `skills/<skill-name>/SKILL.md` — one directory per skill. Each `SKILL.md` is a YAML-frontmatter (`name`, `description`) markdown file. The `description` is the trigger contract — Claude Code uses it to decide when to invoke the skill, so it must clearly state *what the skill does* and *when to use it*.
-  - `commands/<command-name>.md` — optional slash-command definitions, each a YAML-frontmatter markdown file with a `description`.
+  - `.claude-plugin/plugin.json` — that plugin's manifest (`name` matching the directory, `description`, `author`, `homepage`, `repository`, `license`).
+  - `skills/<skill-name>/SKILL.md` — one directory per skill. Each `SKILL.md` is YAML-frontmatter (`name`, `description`) markdown. The `description` is the trigger contract — Claude Code uses it to decide when to invoke the skill, so it must state *what the skill does* and *when to use it* (typically ending in "Use when...").
+  - `commands/<command-name>.md` — optional slash-command definitions, each YAML-frontmatter markdown with a `description`.
+
+Current plugins:
+- `planning` — stress-testing plans/designs through structured questioning (`grill-me`, `handoff`).
+- `git-tools` — git workflow slash commands (`/cm` generates a Conventional Commits message; `/commit` generates one and commits).
+- `clickup` — read/write ClickUp tasks and docs; the skill ships a Python helper at `skills/clickup/scripts/clickup.py`.
+- `code` — writing/reviewing/hardening code (review, simplification, security, performance, TDD, debugging, frontend, planning, interview).
+- `experimental` — in-development skills under evaluation; `defaultEnabled: false`. Skills graduate out of here once verified.
+
+## Progressive disclosure
+
+Keep `SKILL.md` bodies tight. When a skill needs long checklists or deep reference material, put it in a `references/` subdirectory beside the `SKILL.md` (see `plugins/code/skills/*/references/`) and point to it from the body, rather than inlining everything. Bundled helper scripts live under a `scripts/` subdirectory (see the clickup skill).
+
+## Skills must be self-contained
+
+Skills must NOT depend on or cross-reference one another — no "see the other-skill" / `Related:` pointers to sibling skills. Each skill is loaded independently based on its own trigger description, so a cross-skill reference would dangle and rot as skills move or get reworded. Write any needed guidance inline; duplicated content across skills is an acceptable price for independence. (A `Related:` pointer to a section *within the same skill* is fine.)
 
 ## Adding a plugin
 
 1. Create `plugins/<kebab-name>/.claude-plugin/plugin.json` with at least `name` (matching the directory) and `description`.
-2. Add a `skills/` and/or `commands/` directory under the plugin as needed.
+2. Add `skills/` and/or `commands/` directories under the plugin as needed.
 3. Register the plugin in `.claude-plugin/marketplace.json` by appending an entry to `plugins[]` with `name`, `source` (`"./plugins/<kebab-name>"`), and `description`.
 
 ## Adding a skill (to an existing plugin)
 
 1. Create `plugins/<plugin-name>/skills/<kebab-name>/SKILL.md`.
 2. Frontmatter: `name` (matches directory) and `description` (one or two sentences ending in a "Use when..." trigger phrase).
-3. Body: instructions to Claude written in the imperative. Keep it tight — progressive disclosure via bundled resources is preferred over long monolithic prompts.
+3. Body: imperative instructions to Claude. Keep it self-contained and tight; prefer `references/` bundles over long monolithic prompts.
 
 ## Releasing
 
