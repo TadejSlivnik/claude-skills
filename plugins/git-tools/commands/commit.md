@@ -7,12 +7,13 @@ Generate the commit message by invoking the `git-tools:cm` skill (via the Skill 
 
 Then commit, matching the same scope `/cm` inspected:
 
-1. Run `git status --short` to see what is staged vs. unstaged.
+1. Run `git status --short` to see what is staged vs. unstaged vs. untracked.
 2. If there are **staged** changes, commit only those: `git commit -m "<message>"`.
-3. If **nothing is staged**, commit all tracked modifications: `git commit -a -m "<message>"`.
+3. If **nothing is staged**, stage everything (tracked modifications and untracked files) and commit it: `git add -A && git commit -m "<message>"`.
 
 Rules:
 - Use the message exactly as `/cm` produced it.
-- Never `git add` untracked files and never `git push`.
-- If the working tree is completely clean (nothing staged, nothing modified), say so and do not commit.
+- Before staging untracked files, glance at `git status --short` output — if any newly staged file looks like it could hold secrets (`.env`, keys, credentials, tokens), check its contents before committing and flag it rather than committing blindly.
+- Never `git push`.
+- If the working tree is completely clean (nothing staged, nothing modified, nothing untracked), say so and do not commit.
 - After committing, run `git log -1 --oneline` and show it so the user can confirm the result.

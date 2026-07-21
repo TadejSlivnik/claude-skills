@@ -3,7 +3,7 @@ description: Generate a one-line short commit message from staged changes
 model: haiku
 ---
 
-Run `git diff --cached` to see staged changes. If nothing is staged, also run `git diff` to see unstaged changes.
+Run `git diff --cached` to see staged changes. If nothing is staged, also run `git diff` to see unstaged changes and `git status --short` to see untracked files (read the contents of any new file with `git diff --no-index /dev/null <file>` so the message reflects them too).
 
 Then output **only** a single short commit message line inside a fenced code block (so it's easy to copy) — no explanation, no surrounding text, no trailing summary. Just the message itself on one line, wrapped in a code block like:
 
