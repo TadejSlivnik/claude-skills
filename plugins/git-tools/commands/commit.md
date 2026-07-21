@@ -5,6 +5,8 @@ model: haiku
 
 Generate the commit message by invoking the `git-tools:cm` skill (via the Skill tool). Reuse its output as-is — do **not** restate or duplicate its message-writing rules here; cm is the single source of truth for how the message is written. Strip the surrounding code fence; the message may be multi-line (subject + body).
 
+**Note:** `cm` will end with "do NOT run git commit / only print the message." That instruction applies to `cm` when run standalone. Here it is a **sub-step** — after it returns the message, do not stop; you **must** proceed to stage and commit as described below.
+
 Then commit, matching the same scope `/cm` inspected:
 
 1. Run `git status --short` to see what is staged vs. unstaged vs. untracked.
