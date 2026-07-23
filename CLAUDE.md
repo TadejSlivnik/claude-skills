@@ -27,9 +27,11 @@ Current plugins:
 
 Keep `SKILL.md` bodies tight. When a skill needs long checklists or deep reference material, put it in a `references/` subdirectory beside the `SKILL.md` (see `plugins/code/skills/*/references/`) and point to it from the body, rather than inlining everything. Bundled helper scripts live under a `scripts/` subdirectory (see the clickup skill).
 
-## Skills must be self-contained
+## Skills should be self-contained
 
-Skills must NOT depend on or cross-reference one another — no "see the other-skill" / `Related:` pointers to sibling skills. Each skill is loaded independently based on its own trigger description, so a cross-skill reference would dangle and rot as skills move or get reworded. Write any needed guidance inline; duplicated content across skills is an acceptable price for independence. (A `Related:` pointer to a section *within the same skill* is fine.)
+Prefer self-contained skills/commands: it's good when a skill or command does NOT depend on or cross-reference another — no "see the other-skill" / `Related:` pointers to siblings. Each skill is loaded independently based on its own trigger description, so a cross-skill reference can dangle and rot as skills move or get reworded. Writing needed guidance inline (even if it duplicates content elsewhere) buys independence.
+
+This is a preference, not a hard rule. Where a genuine single-source-of-truth is worth more than independence, sharing is fine — e.g. `/commit` inlines the commit-message rules that `/cm` also uses (so it works standalone, since `/cm` is instructed not to commit); duplication there is deliberate. (A `Related:` pointer to a section *within the same skill* is always fine.)
 
 ## Adding a plugin
 
@@ -41,7 +43,7 @@ Skills must NOT depend on or cross-reference one another — no "see the other-s
 
 1. Create `plugins/<plugin-name>/skills/<kebab-name>/SKILL.md`.
 2. Frontmatter: `name` (matches directory) and `description` (one or two sentences ending in a "Use when..." trigger phrase).
-3. Body: imperative instructions to Claude. Keep it self-contained and tight; prefer `references/` bundles over long monolithic prompts.
+3. Body: imperative instructions to Claude. Keep it tight; prefer `references/` bundles over long monolithic prompts.
 
 ## Releasing
 
