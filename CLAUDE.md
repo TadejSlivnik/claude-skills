@@ -18,9 +18,9 @@ Consumers install it with `/plugin marketplace add TadejSlivnik/claude-skills`, 
 
 Current plugins:
 - `planning` — stress-testing plans/designs through structured questioning (`grill-me`, `handoff`).
-- `git-tools` — git workflow slash commands (`/cm` generates a Conventional Commits message; `/commit` generates one and commits).
+- `git-tools` — git workflow slash commands (`/cm` generates a Conventional Commits message; `/commit` generates one and commits; `/squash-branch` collapses a branch's commits into one via a soft reset to the fork point).
 - `clickup` — read/write ClickUp tasks and docs; the skill ships a Python helper at `skills/clickup/scripts/clickup.py`.
-- `code` — writing/reviewing/hardening code (review, simplification, security, performance, TDD, debugging, frontend, planning, interview).
+- `code` — writing/reviewing/hardening code: `api-and-interface-design`, `code-review-and-quality`, `code-simplification`, `debugging-and-error-recovery`, `frontend-ui-engineering`, `frontend-ux-testing`, `incremental-implementation`, `interview-me`, `performance-optimization`, `planning-and-task-breakdown`, `security-and-hardening`, `test-driven-development`.
 - `experimental` — in-development skills under evaluation; `defaultEnabled: false`. Skills graduate out of here once verified.
 
 ## Progressive disclosure
