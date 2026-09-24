@@ -24,6 +24,12 @@ Outside the skill dir on purpose — the skill dir syncs to git.
       "token": "mul_...",                          // personal access token
       "workspace_id": "5fd55892-4180-43f5-9b34-751d16442313",
       "agents_dir": "~/www/privat/multica/agents"  // optional, for `agents push`
+    },
+    "local": {                                     // a self-hosted instance
+      "api_base": "https://multica.lan/api",
+      "token": "mul_...",
+      "workspace_id": "...",
+      "agents_dir": "~/www/privat/multica/agents"
     }
   }
 }
@@ -32,9 +38,16 @@ Outside the skill dir on purpose — the skill dir syncs to git.
 - **token**: Multica → Settings → personal access token. `mul_` prefix. It has no
   scoping — it is the whole account.
 - **workspace_id**: the UUID sent as `X-Workspace-ID`. Most endpoints need it.
+- **api_base**: optional; where this Multica lives. Defaults to the cloud
+  (`https://api.multica.ai/api`). Set it to point a profile at a **self-hosted**
+  instance. A profile is one instance + one workspace, so cloud and self-hosted
+  coexist as separate profiles and `--profile` picks between them — which is what
+  makes a cutover survivable. Issue URLs are parsed by regex, so a self-hosted URL
+  resolves the same as a cloud one.
 - **agents_dir**: where `_conventions.md` and `<agent>.md` live. Only `agents push`
   uses it.
-- Fallback when no config exists: `MULTICA_TOKEN` (+ `MULTICA_WORKSPACE_ID`).
+- Fallback when no config exists: `MULTICA_TOKEN` (+ `MULTICA_WORKSPACE_ID`,
+  `MULTICA_API_BASE`).
 - `python3 scripts/multica.py profiles` lists what is configured.
 
 **Agent ids are never stored in config** — they are resolved by name on every call, so
@@ -43,7 +56,8 @@ adding or renaming an agent needs no config edit.
 ### Creating the config when it's missing
 
 Don't fail — offer to create it. Ask for token and workspace id (and `agents_dir` if
-they maintain agent instructions as files), write with `0600`, confirm the path back.
+they maintain agent instructions as files, `api_base` if it is not the cloud), write
+with `0600`, confirm the path back.
 **Never echo the token.**
 
 ## The dispatch model — read this before assigning anything

@@ -18,7 +18,11 @@ Usage:
 
 Auth: profiles live in ~/.config/multica/profiles.json (override with
 $MULTICA_PROFILES). See SKILL.md for format. Falls back to MULTICA_TOKEN
-(+ MULTICA_WORKSPACE_ID) when no config file is present.
+(+ MULTICA_WORKSPACE_ID, MULTICA_API_BASE) when no config file is present.
+
+Each profile may set "api_base" to point at a self-hosted instance; it defaults
+to the cloud. A profile is one instance + one workspace, so cloud and self-hosted
+live side by side as separate profiles.
 """
 import json
 import os
@@ -29,7 +33,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-API = "https://api.multica.ai/api"
+DEFAULT_API = "https://api.multica.ai/api"
 
 
 # ---- shared ----------------------------------------------------------------
@@ -64,6 +68,7 @@ def resolve_profile(requested):
             "token": token,
             "workspace_id": os.environ.get("MULTICA_WORKSPACE_ID", ""),
             "agents_dir": os.environ.get("MULTICA_AGENTS_DIR", ""),
+            "api_base": os.environ.get("MULTICA_API_BASE", DEFAULT_API),
         }
     profiles = cfg.get("profiles") or {}
     if not profiles:
@@ -80,8 +85,13 @@ def resolve_profile(requested):
     )
 
 
+def api_base(prof):
+    """Where this profile's Multica lives — cloud by default, or a self-hosted host."""
+    return (prof.get("api_base") or DEFAULT_API).rstrip("/")
+
+
 def http(path, prof, body=None, method=None):
-    url = path if path.startswith("http") else API + path
+    url = path if path.startswith("http") else api_base(prof) + path
     headers = {"Authorization": "Bearer " + prof["token"]}
     if prof.get("workspace_id"):
         headers["X-Workspace-ID"] = prof["workspace_id"]
@@ -174,7 +184,10 @@ def all_issues(prof, limit=200):
 
 
 def resolve_issue(ref, prof):
-    """Accept a UUID, a WEBS-41 key, or a multica.ai URL. Returns the issue dict."""
+    """Accept a UUID, a WEBS-41 key, or an issue URL from any host.
+
+    The key is found by regex, so a self-hosted URL works as well as a cloud one.
+    """
     ref = (ref or "").strip()
     if UUID_RE.match(ref):
         d = http(f"/issues/{ref}", prof)
@@ -482,9 +495,10 @@ def status(argv):
     hours = int(flags.get("hours", 24))
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
+    print(f"INSTANCE  {api_base(prof)}")
     d = http("/runtimes", prof)
     rts = d if isinstance(d, list) else d.get("runtimes", [])
-    print("RUNTIMES")
+    print("\nRUNTIMES")
     for r in rts:
         print(f"  {r.get('name'):<18} {r.get('status'):<9} {r.get('device_info')}")
         print(f"  {'':<18} last seen {r.get('last_seen_at') or r.get('updated_at')}")
@@ -519,7 +533,8 @@ def cmd_profiles():
               f"MULTICA_TOKEN is {'set' if os.environ.get('MULTICA_TOKEN') else 'unset'}")
         return
     for name, p in (cfg.get("profiles") or {}).items():
-        print(f"{name:<12} workspace={p.get('workspace_id', '?')} "
+        print(f"{name:<12} {api_base(p)}")
+        print(f"{'':<12}   workspace={p.get('workspace_id', '?')} "
               f"agents_dir={p.get('agents_dir', '-')}")
 
 
