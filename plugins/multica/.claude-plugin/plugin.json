@@ -1,0 +1,10 @@
+{
+    "name": "multica",
+    "description": "Drive a Multica cloud workspace — read issues and comments, dispatch work to agents safely, push agent instructions, and diagnose failed runs.",
+    "author": {
+        "name": "Tadej Slivnik"
+    },
+    "homepage": "https://github.com/TadejSlivnik/claude-skills",
+    "repository": "https://github.com/TadejSlivnik/claude-skills",
+    "license": "MIT"
+}

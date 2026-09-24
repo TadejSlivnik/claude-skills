@@ -20,6 +20,7 @@ Current plugins:
 - `planning` — stress-testing plans/designs through structured questioning (`grill-me`, `handoff`).
 - `git-tools` — git workflow slash commands (`/cm` generates a Conventional Commits message; `/commit` generates one and commits; `/squash-branch` collapses a branch's commits into one via a soft reset to the fork point).
 - `clickup` — read/write ClickUp tasks and docs; the skill ships a Python helper at `skills/clickup/scripts/clickup.py`.
+- `multica` — drive a Multica cloud workspace: read issues and comments, dispatch work to agents (with guards against the two silent no-ops), push agent instructions from a local `agents/` directory, and diagnose failed runs. Ships a Python helper at `skills/multica/scripts/multica.py`; credentials live in `~/.config/multica/profiles.json`.
 - `code` — writing/reviewing/hardening code: `api-and-interface-design`, `code-review-and-quality`, `code-simplification`, `debugging-and-error-recovery`, `frontend-ui-engineering`, `frontend-ux-testing`, `incremental-implementation`, `interview-me`, `performance-optimization`, `planning-and-task-breakdown`, `security-and-hardening`, `test-driven-development`.
 - `experimental` — in-development skills under evaluation; `defaultEnabled: false`. Skills graduate out of here once verified.
 

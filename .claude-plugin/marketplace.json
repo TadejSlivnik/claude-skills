@@ -20,17 +20,22 @@
         {
             "name": "clickup",
             "source": "./plugins/clickup",
-            "description": "Read and write ClickUp tasks and docs by ID or URL — get, create, update, close, and reassign tasks, and read or create docs."
+            "description": "Read and write ClickUp tasks and docs by ID or URL \u2014 get, create, update, close, and reassign tasks, and read or create docs."
+        },
+        {
+            "name": "multica",
+            "source": "./plugins/multica",
+            "description": "Drive a Multica cloud workspace \u2014 read issues and comments, dispatch work to agents safely, push agent instructions, and diagnose failed runs."
         },
         {
             "name": "code",
             "source": "./plugins/code",
-            "description": "Skills for writing, reviewing, and hardening code — security, performance, simplification, multi-axis review, and requirement-extraction interviews."
+            "description": "Skills for writing, reviewing, and hardening code \u2014 security, performance, simplification, multi-axis review, and requirement-extraction interviews."
         },
         {
             "name": "experimental",
             "source": "./plugins/experimental",
-            "description": "Untested, in-development skills under evaluation. Not for general use — skills graduate to another plugin once verified.",
+            "description": "Untested, in-development skills under evaluation. Not for general use \u2014 skills graduate to another plugin once verified.",
             "defaultEnabled": false
         }
     ]
