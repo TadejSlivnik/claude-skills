@@ -1,6 +1,6 @@
 ---
 name: multica
-description: Read and drive a Multica cloud workspace — get issues and comments, dispatch work to agents, push agent instructions and project/workspace context, cancel duplicate runs, and diagnose a stalled pipeline. Use when the user invokes /multica, pastes a multica.ai issue URL, names an issue key like WEBS-41, or says "check that task", "why did this stall", "hand it to the Reviewer", "update the agent instructions", "is the runtime up".
+description: Read and drive a Multica cloud workspace — get issues and comments, create tasks with the right project/labels/priority, dispatch work to agents, push agent instructions and project/workspace context, cancel duplicate runs, and diagnose a stalled pipeline. Use when the user invokes /multica, pastes a multica.ai issue URL, names an issue key like WEBS-41, or says "create a task/issue in multica", "add a label to that task", "check that task", "why did this stall", "hand it to the Reviewer", "update the agent instructions", "is the runtime up".
 ---
 
 # Multica
@@ -117,15 +117,66 @@ a run. That is usually what you want when waking a stuck agent — just know it 
 
 ## Creating
 
+### Never create a task from the title alone
+
+A task is not just a title. **Project**, **labels** and **assignee** decide where it
+appears and how it is handled, and a task missing them is not a lighter version of the
+right task — it is one whose routing and gates are undefined. So when asked to create a
+task, do not create it yet. First run both menus and **show the user the real options**:
+
 ```bash
-python3 scripts/multica.py issue create --title "..." --project mydash \
-  [--parent WEBS-11] [--stage 3] [--description-file /tmp/body.md] [--assign Planner]
+python3 scripts/multica.py labels          # names + what each one actually does
+python3 scripts/multica.py project list    # the projects that exist
+python3 scripts/multica.py agents list     # who can be assigned
 ```
 
-New issues land in **`todo`**, not `backlog` — verified against a live workspace, and
-worth knowing because assignment never triggers from `backlog`. `--assign` checks the
-category and only forces `todo` when it has to, then assigns. `--project` takes a name
-or a UUID.
+Then present the full draft — title, project, labels, priority, assignee, parent/stage —
+and ask. Offer a recommendation per field, never a silent default. Infer nothing from
+the working directory; a repo and a project share a name often enough to be dangerous.
+Create only once the user has answered.
+
+The one exception is an explicit spelled-out instruction ("create X in mydash, label
+needs-design, unassigned") — that is the answer already, so create it.
+
+**Labels in particular are gate config, not taxonomy.** In a squad workspace a label
+like `needs-design` or `skip-all-approvals` is what decides whether a human approves
+before shipping. Read each label's description back to the user rather than matching on
+its name — `skip-develop-approval` and `skip-all-approvals` sound alike and differ by a
+production release.
+
+### The command
+
+```bash
+python3 scripts/multica.py issue create --title "..." --project mydash \
+  --label needs-design --label needs-plan-approval --priority high \
+  [--due 2026-10-20] [--parent WEBS-11] [--stage 3] \
+  [--description-file /tmp/body.md] [--assign Planner]
+```
+
+`--label` repeats or takes a comma-separated list, and every name is resolved **before**
+the issue is created, so a typo fails with the list of real labels instead of leaving a
+half-configured issue behind. `--priority` is one of `none low medium high urgent`.
+`--project` takes a name or a UUID.
+
+**Order is the whole design.** The create body takes neither labels nor priority, so
+they are separate calls — and they all run before the assignment, because assigning is
+what starts the run. An agent woken on an issue whose labels have not landed yet has
+already read the wrong gate config. The command does this in order and reads the issue
+back afterwards to prove the fields stored.
+
+New issues land in **`todo`**, not `backlog` — worth knowing because assignment never
+triggers from `backlog`. `--assign` checks the category and only forces `todo` when it
+has to, then assigns.
+
+Labels on an existing issue:
+
+```bash
+python3 scripts/multica.py issue label WEBS-41 --add needs-design --remove skip-all-approvals
+```
+
+Neither call wakes an agent — labels are not a trigger. That cuts both ways: adding
+`needs-design` to an issue an agent is already working does **not** make it re-read the
+gate. Comment to wake it.
 
 ## Pushing agent instructions
 
@@ -253,6 +304,23 @@ points. These were established by probing a live workspace:
   notification.
 - Runs are reachable only per agent (`GET /agents/{id}/tasks`). There is no `/tasks` or
   `/runs` collection.
+- **The issue create body is strictly validated** — an unknown field is a `400 invalid
+  request body`, not a silent drop. `label_ids` and `priority` are both rejected there,
+  so neither can be set at creation.
+- **Labels attach one at a time via `POST /issues/{id}/labels {"label_id": "<uuid>"}`.**
+  `PUT` on that path is 405, a `label_ids` array is 400, and `label_ids` on
+  `PUT /issues/{id}` returns **200 and stores nothing**. Re-posting a label already on
+  the issue is a harmless 200. Remove with `DELETE /issues/{id}/labels/{label_id}`.
+- **`priority` is a string enum**, not an int: `none low medium high urgent`. An integer
+  is a 400. Settable only by `PUT /issues/{id}` after creation; it defaults to `none`.
+- `due_date` and `start_date` take `YYYY-MM-DD` via `PUT /issues/{id}`.
+- **`DELETE /issues/{id}` works** (204), unlike agents, which are 405 and archive-only.
+  The issue number is still consumed.
+- Labels are workspace-scoped and carry a `resource_type` (`issue`), a `description`
+  worth reading, and a `usage_count`. There is no `/tags`.
+- There is no members/users endpoint (`/members`, `/users`, `/workspace-members` are all
+  404), so **a human assignee cannot be resolved by name.** `--assign` therefore only
+  takes agents. Assigning a task to a person is a UI job.
 
 ## Rules
 

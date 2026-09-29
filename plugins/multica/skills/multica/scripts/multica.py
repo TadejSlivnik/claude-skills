@@ -6,9 +6,12 @@ Usage:
   multica.py issue comment <KEY|url|id> (--file path | --text "...") [--profile p]
   multica.py issue dispatch <KEY|url|id> --to <AgentName> [--comment-file path]
                             [--profile p] [--force] [--dry-run]
-  multica.py issue create --title "..." [--project name|id] [--parent KEY]
-                          [--stage N] [--description-file path] [--status todo]
-                          [--assign <AgentName>] [--profile p]
+  multica.py issue create --title "..." [--project name|id] [--label name ...]
+                          [--priority none|low|medium|high|urgent] [--due DATE]
+                          [--parent KEY] [--stage N] [--description-file path]
+                          [--status todo] [--assign <AgentName>] [--profile p]
+  multica.py issue label <KEY|url|id> [--add name ...] [--remove name ...]
+  multica.py labels [--json] [--profile p]
   multica.py agents list [--profile p]
   multica.py agents push [Name ...] [--profile p] [--dry-run]
   multica.py workspace show [--profile p]
@@ -132,7 +135,12 @@ def parse_flags(argv):
         if a.startswith("--"):
             key = a[2:]
             if i + 1 < len(argv) and not argv[i + 1].startswith("--"):
-                flags[key] = argv[i + 1]
+                val = argv[i + 1]
+                if key in flags:            # repeated flag -> list, for --label
+                    prev = flags[key]
+                    flags[key] = (prev if isinstance(prev, list) else [prev]) + [val]
+                else:
+                    flags[key] = val
                 i += 2
             else:
                 flags[key] = True
@@ -145,6 +153,15 @@ def parse_flags(argv):
 
 def emit(obj):
     print(json.dumps(obj, indent=2, ensure_ascii=False))
+
+
+def flag_list(flags, key):
+    """--label a --label b and --label a,b both mean [a, b]."""
+    raw = flags.get(key)
+    if not raw or raw is True:
+        return []
+    items = raw if isinstance(raw, list) else [raw]
+    return [x.strip() for i in items for x in i.split(",") if x.strip()]
 
 
 def read_body(flags, file_key, text_key=None):
@@ -249,6 +266,10 @@ def issue_get(argv):
     print(f"  id        {issue['id']}")
     print(f"  status    {status_of(issue)}")
     print(f"  assignee  {issue.get('assignee_type')} {issue.get('assignee_id')}")
+    # Labels are gate config in a squad workspace, so never read an issue without them.
+    print(f"  labels    {', '.join(l['name'] for l in (issue.get('labels') or [])) or '-'}")
+    print(f"  priority  {issue.get('priority')}"
+          + (f"   due {issue['due_date']}" if issue.get("due_date") else ""))
     print(f"  parent    {issue.get('parent_issue_id')}")
     print(f"  stage     {issue.get('stage')}")
     print(f"  project   {issue.get('project_id')}")
@@ -340,11 +361,33 @@ def issue_dispatch(argv):
               file=sys.stderr)
 
 
+PRIORITIES = ("none", "low", "medium", "high", "urgent")
+
+
 def issue_create(argv):
+    """Create an issue, then fill in everything the create body refuses to take.
+
+    The create body is strictly validated — an unknown field is a 400, not a
+    silent drop — and it takes neither labels nor priority. Both are separate
+    calls afterwards, which makes ORDER the thing to get right: labels, priority
+    and dates all land BEFORE the assignment, because assigning is what starts
+    the run. An agent that wakes to an unlabelled issue has already read the
+    wrong gate config by the time the label arrives.
+    """
     pos, flags = parse_flags(argv)
     if not flags.get("title"):
-        sys.exit("usage: issue create --title \"...\" [--project x] [--parent KEY] [--stage N]")
+        sys.exit('usage: issue create --title "..." [--project x] [--label l ...] '
+                 "[--priority p] [--due YYYY-MM-DD] [--parent KEY] [--stage N] "
+                 "[--assign Agent]")
     prof = resolve_profile(flags.get("profile"))
+
+    # Resolve every reference before writing anything: a typo'd label should not
+    # leave a half-configured issue behind.
+    label_ids = [resolve_label(n, prof) for n in flag_list(flags, "label")]
+    priority = (flags.get("priority") or "").lower() or None
+    if priority and priority not in PRIORITIES:
+        sys.exit(f"ERROR: priority '{priority}' is not one of {', '.join(PRIORITIES)}")
+
     body = {"title": flags["title"]}
     desc = read_body(flags, "description-file", "description")
     if desc:
@@ -357,20 +400,97 @@ def issue_create(argv):
         body["stage"] = int(flags["stage"])
     created = http("/issues", prof, body)
     created = created.get("issue", created)
-    print(f"created {created.get('identifier')}  {created['id']}")
+    iid = created["id"]
+    print(f"created {created.get('identifier')}  {iid}")
+
+    # One POST per label — the API takes exactly one at a time.
+    for name, lid in zip(flag_list(flags, "label"), label_ids):
+        http(f"/issues/{iid}/labels", prof, {"label_id": lid})
+        print(f"  label -> {name}")
+    patch = {}
+    if priority:
+        patch["priority"] = priority
+    if flags.get("due"):
+        patch["due_date"] = flags["due"]
+    if patch:
+        http(f"/issues/{iid}", prof, patch, method="PUT")
+        print("  " + ", ".join(f"{k} -> {v}" for k, v in patch.items()))
 
     # Assignment never triggers from backlog, so make sure we are out of it first.
     want = flags.get("status")
     if not want and flags.get("assign") and status_category(created) == "backlog":
         want = "todo"
     if want:
-        http(f"/issues/{created['id']}", prof, {"status": want}, method="PUT")
+        http(f"/issues/{iid}", prof, {"status": want}, method="PUT")
         print(f"  status -> {want}")
+
+    # Last, because this is the call that starts a run.
     if flags.get("assign"):
         agent = resolve_agent(flags["assign"], prof)
-        http(f"/issues/{created['id']}", prof,
+        http(f"/issues/{iid}", prof,
              {"assignee_type": "agent", "assignee_id": agent["id"]}, method="PUT")
         print(f"  dispatched -> {agent['name']}")
+
+    if label_ids or patch:
+        back = http(f"/issues/{iid}", prof)
+        back = back.get("issue", back)
+        print(f"  verified: labels={[l['name'] for l in (back.get('labels') or [])]} "
+              f"priority={back.get('priority')} due={back.get('due_date')}")
+
+
+def issue_label(argv):
+    """Add or remove labels on an existing issue. Neither call wakes an agent."""
+    pos, flags = parse_flags(argv)
+    if not pos:
+        sys.exit('usage: issue label <KEY> [--add l ...] [--remove l ...]')
+    prof = resolve_profile(flags.get("profile"))
+    issue = resolve_issue(pos[0], prof)
+    add, remove = flag_list(flags, "add"), flag_list(flags, "remove")
+    if not add and not remove:
+        sys.exit("nothing to do: pass --add and/or --remove")
+    for name in add:
+        http(f"/issues/{issue['id']}/labels", prof,
+             {"label_id": resolve_label(name, prof)})
+        print(f"  + {name}")
+    for name in remove:
+        http(f"/issues/{issue['id']}/labels/{resolve_label(name, prof)}",
+             prof, method="DELETE")
+        print(f"  - {name}")
+    back = http(f"/issues/{issue['id']}", prof)
+    back = back.get("issue", back)
+    print(f"{issue['identifier']} labels: "
+          f"{', '.join(l['name'] for l in (back.get('labels') or [])) or '(none)'}")
+
+
+def all_labels(prof):
+    d = http("/labels", prof)
+    return d if isinstance(d, list) else d.get("labels", [])
+
+
+def resolve_label(ref, prof):
+    if UUID_RE.match(ref):
+        return ref
+    labels = all_labels(prof)
+    for l in labels:
+        if (l.get("name") or "").lower() == ref.lower():
+            return l["id"]
+    sys.exit(f"ERROR: no label '{ref}'. Have: "
+             f"{', '.join(l.get('name', '?') for l in labels)}")
+
+
+def labels_list(argv):
+    """The menu to offer before creating anything — names, colours and meaning."""
+    _, flags = parse_flags(argv)
+    prof = resolve_profile(flags.get("profile"))
+    labels = all_labels(prof)
+    if flags.get("json"):
+        return emit(labels)
+    if not labels:
+        return print("(no labels in this workspace)")
+    for l in labels:
+        print(f"{l.get('name'):<24} {l.get('color', ''):<9} used {l.get('usage_count', 0)}")
+        if l.get("description"):
+            print(f"  {l['description']}")
 
 
 def resolve_project(ref, prof):
@@ -796,10 +916,11 @@ def main():
     group, rest = argv[0], argv[1:]
     if group == "issue":
         if not rest:
-            sys.exit("usage: issue (get|comment|dispatch|create) ...")
+            sys.exit("usage: issue (get|comment|dispatch|create|label) ...")
         sub, rest = rest[0], rest[1:]
         return {"get": issue_get, "comment": issue_comment,
-                "dispatch": issue_dispatch, "create": issue_create}.get(
+                "dispatch": issue_dispatch, "create": issue_create,
+                "label": issue_label}.get(
                     sub, lambda a: sys.exit(f"unknown: issue {sub}"))(rest)
     if group == "agents":
         if not rest:
@@ -821,6 +942,8 @@ def main():
         return {"list": project_list, "show": project_show,
                 "pull": project_pull, "push": project_push}.get(
                     sub, lambda a: sys.exit(f"unknown: project {sub}"))(rest)
+    if group == "labels":
+        return labels_list(rest)
     if group == "runs":
         return runs(rest)
     if group == "status":
