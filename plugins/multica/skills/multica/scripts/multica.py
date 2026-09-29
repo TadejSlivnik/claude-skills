@@ -386,9 +386,6 @@ def resolve_project(ref, prof):
 
 # ---- agent commands --------------------------------------------------------
 
-STANDALONE_MARKER = "<!-- standalone -->"
-
-
 def agents_dir(prof):
     d = prof.get("agents_dir")
     if not d:
@@ -408,19 +405,22 @@ def agents_list(argv):
 
 
 def agents_push(argv):
-    """Upload _conventions.md + <agent>.md as each agent's Instructions, then verify.
+    """Upload <agent>.md as that agent's Instructions, then verify.
 
-    Conventions are prepended unless the agent file's first line is the standalone
-    marker. Agent ids are resolved by name at call time — never cached.
+    Role only. Everything shared across agents belongs in the workspace context and
+    everything project-specific in the project description — the platform injects both
+    into every brief, so prepending them here would ship them twice. Agent ids are
+    resolved by name at call time, never cached.
     """
     names, flags = parse_flags(argv)
     prof = resolve_profile(flags.get("profile"))
     d = agents_dir(prof)
 
-    conv_path = os.path.join(d, "_conventions.md")
-    if not os.path.exists(conv_path):
-        sys.exit(f"ERROR: no _conventions.md in {d}")
-    conv = open(conv_path, encoding="utf-8").read()
+    stale = os.path.join(d, "_conventions.md")
+    if os.path.exists(stale):
+        sys.exit(f"ERROR: {stale} still exists but is no longer used. Its content belongs "
+                 "in context/workspace.md ('workspace push'). Delete it to confirm the "
+                 "move, or agents will silently lose it.")
 
     live = {a["name"].lower(): a for a in all_agents(prof)}
     files = {}
@@ -437,18 +437,17 @@ def agents_push(argv):
     rc = 0
     for name in wanted:
         path = files[name]
-        own = open(path, encoding="utf-8").read()
-        standalone = own.lstrip().startswith(STANDALONE_MARKER)
-        instructions = own if standalone else conv + "\n\n---\n\n" + own
+        instructions = open(path, encoding="utf-8").read()
 
         agent = live.get(name)
         if not agent:
             print(f"{name:<12} SKIP   no agent named '{name}' in the workspace")
             rc = 1
             continue
-        tag = "standalone" if standalone else "conventions"
         if flags.get("dry-run"):
-            print(f"{agent['name']:<12} DRY    {len(instructions)}ch  ({tag})")
+            live_len = len(agent.get("instructions") or "")
+            note = "no change" if live_len == len(instructions) else f"live is {live_len}ch"
+            print(f"{agent['name']:<12} DRY    {len(instructions)}ch  ({note})")
             continue
 
         http(f"/agents/{agent['id']}", prof, {"instructions": instructions}, method="PUT")
@@ -457,7 +456,7 @@ def agents_push(argv):
         back = back.get("agent", back)
         ok = (back.get("instructions") or "") == instructions
         print(f"{agent['name']:<12} {'OK' if ok else 'MISMATCH'}   "
-              f"{len(instructions)}ch  ({tag})")
+              f"{len(instructions)}ch")
         if not ok:
             rc = 1
     sys.exit(rc)

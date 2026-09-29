@@ -134,13 +134,14 @@ python3 scripts/multica.py agents push              # every agent file in agents
 python3 scripts/multica.py agents push reviewer auditor
 ```
 
-Each agent's Instructions = `_conventions.md` + `\n\n---\n\n` + `<agent>.md`, uploaded
-via `PUT /agents/{id}`, then **read back and compared** — this API returns 200 for
-fields it silently drops, so a 200 alone proves nothing.
+Each agent's Instructions = `<agent>.md`, verbatim, uploaded via `PUT /agents/{id}`,
+then **read back and compared** — this API returns 200 for fields it silently drops, so
+a 200 alone proves nothing.
 
-An agent file whose first line is `<!-- standalone -->` is uploaded **without** the
-conventions prepended. That is how agents outside the squad (diagnostics, one-off
-helpers) opt out.
+**Agent files carry the role and nothing else.** Anything shared across agents belongs in
+the workspace context, anything project-specific in the project description; the platform
+injects both into every brief, so prepending them here would ship them twice. `push`
+refuses to run while a `_conventions.md` is still present in `agents_dir`.
 
 ## Where instructions live — four tiers, no overlap
 
