@@ -1,6 +1,6 @@
 ---
 name: multica
-description: Read and drive a Multica cloud workspace — get issues and comments, dispatch work to agents, push agent instructions, cancel duplicate runs, and diagnose a stalled pipeline. Use when the user invokes /multica, pastes a multica.ai issue URL, names an issue key like WEBS-41, or says "check that task", "why did this stall", "hand it to the Reviewer", "update the agent instructions", "is the runtime up".
+description: Read and drive a Multica cloud workspace — get issues and comments, dispatch work to agents, push agent instructions and project/workspace context, cancel duplicate runs, and diagnose a stalled pipeline. Use when the user invokes /multica, pastes a multica.ai issue URL, names an issue key like WEBS-41, or says "check that task", "why did this stall", "hand it to the Reviewer", "update the agent instructions", "is the runtime up".
 ---
 
 # Multica
@@ -23,7 +23,8 @@ Outside the skill dir on purpose — the skill dir syncs to git.
     "websites": {
       "token": "mul_...",                          // personal access token
       "workspace_id": "5fd55892-4180-43f5-9b34-751d16442313",
-      "agents_dir": "~/www/privat/multica/agents"  // optional, for `agents push`
+      "agents_dir": "~/www/privat/multica/agents"  // optional, for `agents push`;
+                                                   // context/ is looked for beside it
     },
     "local": {                                     // a self-hosted instance
       "api_base": "https://multica.lan/api",
@@ -140,6 +141,62 @@ fields it silently drops, so a 200 alone proves nothing.
 An agent file whose first line is `<!-- standalone -->` is uploaded **without** the
 conventions prepended. That is how agents outside the squad (diagnostics, one-off
 helpers) opt out.
+
+## Where instructions live — four tiers, no overlap
+
+The platform injects text into every agent brief from three places. Only the fourth is
+per-role. Put a fact in exactly **one** tier; restating it for emphasis is how the
+copies drift apart.
+
+| Tier | Slot | Reaches | Holds |
+|---|---|---|---|
+| 1 | `workspace.context` → `## Workspace Context` | every agent, every task kind incl. chat | rules true of all projects |
+| 2 | `project.description` → `## Project Context` | every agent working that project | per-project policy needed **before** checkout |
+| 3 | repo `CLAUDE.md` | whoever reads it after checkout | stack, build, test, product rules |
+| 4 | agent Instructions | that one agent | the role, nothing about a project |
+
+Tiers 1 and 2 are **injected, not fetched** — an agent cannot skip them. Tier 3 only
+lands if the agent actually opens the file, so nothing that gates a decision belongs
+there. Tier 2 also renders the project's `github_repo` resources and tells the agent to
+run `multica repo checkout <url>`, so repo URLs never belong in instruction text.
+
+Tier 2 is one string per project, but a project can have several repos with different
+policy (mydash and party-games each have an API with no audit and a frontend with one).
+Key that prose by repo inside the description.
+
+## Pushing workspace and project context
+
+Tiers 1 and 2 are edited in the Multica UI by default — no diff, no history, no review.
+Keep them in files instead, beside `agents_dir`:
+
+```
+multica/
+  agents/            _conventions.md, <agent>.md      -> tier 4
+  context/
+    workspace.md                                      -> tier 1
+    projects/<project title>.md                       -> tier 2
+```
+
+`context_dir` overrides the location; it defaults to `<parent of agents_dir>/context`.
+Its own directory on purpose — a bare `workspace.md` beside the repo docs collides with
+`WORKSPACE.md` on a case-insensitive filesystem and not on a case-sensitive one.
+
+```bash
+python3 scripts/multica.py project list            # live size vs local, per project
+python3 scripts/multica.py project show finance    # description + repo resources
+python3 scripts/multica.py project pull            # seed files from live
+python3 scripts/multica.py project push [name ...] # [--dry-run]
+python3 scripts/multica.py workspace show|pull|push
+```
+
+**Always `pull` before the first `push`.** These fields are usually already populated
+and the files are not; pushing first would blank them. `pull` refuses to overwrite a
+local file that differs (`--force` to take live), and `push` refuses to send an empty
+file over a non-empty live value.
+
+Both use `PUT` — `/projects/{id}` rejects `PATCH` with 405 — and both **read back and
+compare**, like `agents push`. A `PUT` carrying one field merges; it does not replace
+the record.
 
 ## Diagnosing a stall
 

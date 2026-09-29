@@ -11,6 +11,11 @@ Usage:
                           [--assign <AgentName>] [--profile p]
   multica.py agents list [--profile p]
   multica.py agents push [Name ...] [--profile p] [--dry-run]
+  multica.py workspace show [--profile p]
+  multica.py workspace (pull|push) [--profile p] [--dry-run] [--force]
+  multica.py project list [--profile p]
+  multica.py project show <name> [--profile p]
+  multica.py project (pull|push) [name ...] [--profile p] [--dry-run] [--force]
   multica.py runs [--agent Name] [--failed] [--limit N] [--profile p]
   multica.py runs cancel <task-id> [--profile p]
   multica.py status [--hours N] [--profile p]
@@ -19,6 +24,12 @@ Usage:
 Auth: profiles live in ~/.config/multica/profiles.json (override with
 $MULTICA_PROFILES). See SKILL.md for format. Falls back to MULTICA_TOKEN
 (+ MULTICA_WORKSPACE_ID, MULTICA_API_BASE) when no config file is present.
+
+Instruction text lives in files, never only on the server. agents_dir holds
+_conventions.md and <agent>.md. Beside it, context/workspace.md is the workspace
+context and context/projects/<title>.md is each project description — both
+injected by the platform into every agent brief. Override with "context_dir".
+Always `pull` before the first `push`: it seeds the files from the live values.
 
 Each profile may set "api_base" to point at a self-hosted instance; it defaults
 to the cloud. A profile is one instance + one workspace, so cloud and self-hosted
@@ -365,8 +376,7 @@ def issue_create(argv):
 def resolve_project(ref, prof):
     if UUID_RE.match(ref):
         return ref
-    d = http("/projects", prof)
-    projects = d if isinstance(d, list) else d.get("projects", [])
+    projects = all_projects(prof)
     for p in projects:
         if (p.get("title") or "").lower() == ref.lower():
             return p["id"]
@@ -448,6 +458,244 @@ def agents_push(argv):
         ok = (back.get("instructions") or "") == instructions
         print(f"{agent['name']:<12} {'OK' if ok else 'MISMATCH'}   "
               f"{len(instructions)}ch  ({tag})")
+        if not ok:
+            rc = 1
+    sys.exit(rc)
+
+
+# ---- workspace and project context -----------------------------------------
+#
+# Two injection slots the platform renders into every agent brief:
+#   workspace.context    -> "## Workspace Context", every agent, every task kind
+#   project.description  -> "## Project Context", every agent working that project
+# Both are injected, not fetched, so an agent cannot skip them. Keeping them in
+# git and pushing from here is what stops them drifting the way agent files did.
+
+def context_dir(prof, create=False):
+    """Where workspace.md and projects/*.md live.
+
+    Defaults to <parent of agents_dir>/context, so a profile already pointing
+    at .../multica/agents needs no new key.
+    """
+    d = prof.get("context_dir")
+    if not d:
+        ad = prof.get("agents_dir")
+        if not ad:
+            sys.exit("ERROR: this profile has neither 'context_dir' nor 'agents_dir'. "
+                     f"Add one to {config_path()}")
+        # Its own directory, never beside the repo docs: a bare workspace.md
+        # collides with WORKSPACE.md on a case-insensitive filesystem and not on
+        # a case-sensitive one, which is the worse of the two failures.
+        d = os.path.join(os.path.dirname(os.path.expanduser(ad).rstrip("/")),
+                         "context")
+    d = os.path.expanduser(d)
+    if not os.path.isdir(d):
+        if create:
+            os.makedirs(d, exist_ok=True)
+        else:
+            sys.exit(f"ERROR: no context directory at {d} — run 'project pull' or "
+                     "'workspace pull' first; they seed it from the live values.")
+    return d
+
+
+def workspace_file(prof, create=False):
+    return os.path.join(context_dir(prof, create), "workspace.md")
+
+
+def projects_dir(prof, must_exist=True):
+    d = os.path.join(context_dir(prof, create=not must_exist), "projects")
+    if must_exist and not os.path.isdir(d):
+        sys.exit(f"ERROR: no projects directory at {d} — run 'project pull' first; "
+                 "it seeds the files from the live descriptions so nothing is lost.")
+    return d
+
+
+def get_workspace(prof):
+    wid = prof.get("workspace_id")
+    if not wid:
+        sys.exit("ERROR: this profile has no 'workspace_id'.")
+    d = http(f"/workspaces/{wid}", prof)
+    return d.get("workspace", d)
+
+
+def all_projects(prof):
+    d = http("/projects", prof)
+    return d if isinstance(d, list) else d.get("projects", [])
+
+
+def get_project(pid, prof):
+    d = http(f"/projects/{pid}", prof)
+    return d.get("project", d)
+
+
+def _wanted_projects(names, prof):
+    live = all_projects(prof)
+    if not names:
+        return sorted(live, key=lambda p: (p.get("title") or "").lower())
+    by = {(p.get("title") or "").lower(): p for p in live}
+    out, missing = [], []
+    for n in names:
+        p = by.get(n.lower())
+        if p:
+            out.append(p)
+        else:
+            missing.append(n)
+    if missing:
+        sys.exit(f"ERROR: no project: {', '.join(missing)}. Have: "
+                 f"{', '.join(p.get('title', '?') for p in live)}")
+    return out
+
+
+def _read_local(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read().strip()
+
+
+def _write_local(path, text):
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text + "\n")
+
+
+# --- workspace ---
+
+def workspace_show(argv):
+    _, flags = parse_flags(argv)
+    prof = resolve_profile(flags.get("profile"))
+    w = get_workspace(prof)
+    ctx = (w.get("context") or "").strip()
+    print(f"# {w.get('name')} ({w.get('slug')})  prefix={w.get('issue_prefix')}")
+    print(f"# context: {len(ctx)} chars — rendered as '## Workspace Context' "
+          "in every agent brief\n")
+    print(ctx or "(empty)")
+
+
+def workspace_pull(argv):
+    _, flags = parse_flags(argv)
+    prof = resolve_profile(flags.get("profile"))
+    ctx = (get_workspace(prof).get("context") or "").strip()
+    path = workspace_file(prof, create=True)
+    if os.path.exists(path):
+        local = _read_local(path)
+        if local == ctx:
+            print(f"workspace.md  SAME    {len(ctx)}ch")
+            return
+        if not flags.get("force"):
+            sys.exit(f"ERROR: {path} differs from live "
+                     f"(local {len(local)}ch, live {len(ctx)}ch). "
+                     "Pass --force to overwrite the local copy, or push instead.")
+    _write_local(path, ctx)
+    print(f"workspace.md  PULLED  {len(ctx)}ch -> {path}")
+
+
+def workspace_push(argv):
+    _, flags = parse_flags(argv)
+    prof = resolve_profile(flags.get("profile"))
+    path = workspace_file(prof)
+    if not os.path.exists(path):
+        sys.exit(f"ERROR: no workspace.md at {path}. Run 'workspace pull' first — "
+                 "it seeds the file from the live value so nothing is lost.")
+    text = _read_local(path)
+    live = (get_workspace(prof).get("context") or "").strip()
+    if flags.get("dry-run"):
+        note = "no change" if live == text else f"live is {len(live)}ch"
+        print(f"workspace     DRY     {len(text)}ch  ({note})")
+        return
+    if not text and live:
+        sys.exit("ERROR: workspace.md is empty but the live context is not — "
+                 "refusing to blank it. Delete it in the UI if that is what you want.")
+    http(f"/workspaces/{prof['workspace_id']}", prof, {"context": text}, method="PUT")
+    # Accepted != stored on this API — read back rather than trusting the 200.
+    back = (get_workspace(prof).get("context") or "").strip()
+    ok = back == text
+    print(f"workspace     {'OK' if ok else 'MISMATCH'}      {len(text)}ch")
+    sys.exit(0 if ok else 1)
+
+
+# --- projects ---
+
+def project_list(argv):
+    _, flags = parse_flags(argv)
+    prof = resolve_profile(flags.get("profile"))
+    d = os.path.join(context_dir(prof, create=True), "projects")
+    for p in _wanted_projects([], prof):
+        desc = (p.get("description") or "").strip()
+        path = os.path.join(d, f"{p.get('title')}.md")
+        if os.path.exists(path):
+            local = _read_local(path)
+            state = "same" if local == desc else f"DIFFERS (local {len(local)}ch)"
+        else:
+            state = "no local file"
+        print(f"{p.get('title'):<20} {len(desc):>5}ch  "
+              f"res={p.get('resource_count')}  {state}")
+
+
+def project_show(argv):
+    names, flags = parse_flags(argv)
+    if not names:
+        sys.exit("usage: project show <name>")
+    prof = resolve_profile(flags.get("profile"))
+    p = _wanted_projects(names[:1], prof)[0]
+    full = get_project(p["id"], prof)
+    print(f"# {full.get('title')}  status={full.get('status')}  id={full['id']}")
+    res = http(f"/projects/{p['id']}/resources", prof).get("resources") or []
+    for r in res:
+        ref = r.get("resource_ref") or {}
+        print(f"# resource: {r.get('resource_type')}  {ref.get('url') or ref}")
+    desc = (full.get("description") or "").strip()
+    print(f"# description: {len(desc)} chars — rendered as '## Project Context'\n")
+    print(desc or "(empty)")
+
+
+def project_pull(argv):
+    names, flags = parse_flags(argv)
+    prof = resolve_profile(flags.get("profile"))
+    d = projects_dir(prof, must_exist=False)
+    os.makedirs(d, exist_ok=True)
+    rc = 0
+    for p in _wanted_projects(names, prof):
+        desc = (p.get("description") or "").strip()
+        path = os.path.join(d, f"{p.get('title')}.md")
+        if os.path.exists(path):
+            local = _read_local(path)
+            if local == desc:
+                print(f"{p['title']:<20} SAME    {len(desc)}ch")
+                continue
+            if not flags.get("force"):
+                print(f"{p['title']:<20} DIFFERS local {len(local)}ch vs live "
+                      f"{len(desc)}ch — not overwritten (--force to take live)")
+                rc = 1
+                continue
+        _write_local(path, desc)
+        print(f"{p['title']:<20} PULLED  {len(desc)}ch")
+    sys.exit(rc)
+
+
+def project_push(argv):
+    names, flags = parse_flags(argv)
+    prof = resolve_profile(flags.get("profile"))
+    d = projects_dir(prof)
+    rc = 0
+    for p in _wanted_projects(names, prof):
+        path = os.path.join(d, f"{p.get('title')}.md")
+        if not os.path.exists(path):
+            print(f"{p['title']:<20} SKIP    no {os.path.basename(path)} in {d}")
+            continue
+        text = _read_local(path)
+        live = (p.get("description") or "").strip()
+        if not text and live:
+            print(f"{p['title']:<20} SKIP    file is empty but live is {len(live)}ch "
+                  "— refusing to blank the description")
+            rc = 1
+            continue
+        if flags.get("dry-run"):
+            note = "no change" if live == text else f"live is {len(live)}ch"
+            print(f"{p['title']:<20} DRY     {len(text)}ch  ({note})")
+            continue
+        http(f"/projects/{p['id']}", prof, {"description": text}, method="PUT")
+        # Accepted != stored on this API — read back rather than trusting the 200.
+        back = (get_project(p["id"], prof).get("description") or "").strip()
+        ok = back == text
+        print(f"{p['title']:<20} {'OK' if ok else 'MISMATCH'}      {len(text)}ch")
         if not ok:
             rc = 1
     sys.exit(rc)
@@ -536,6 +784,7 @@ def cmd_profiles():
         print(f"{name:<12} {api_base(p)}")
         print(f"{'':<12}   workspace={p.get('workspace_id', '?')} "
               f"agents_dir={p.get('agents_dir', '-')}")
+        print(f"{'':<12}   context_dir={p.get('context_dir') or '(beside agents_dir)'}")
 
 
 # ---- entry -----------------------------------------------------------------
@@ -559,6 +808,20 @@ def main():
         sub, rest = rest[0], rest[1:]
         return {"list": agents_list, "push": agents_push}.get(
             sub, lambda a: sys.exit(f"unknown: agents {sub}"))(rest)
+    if group == "workspace":
+        if not rest:
+            sys.exit("usage: workspace (show|pull|push) ...")
+        sub, rest = rest[0], rest[1:]
+        return {"show": workspace_show, "pull": workspace_pull,
+                "push": workspace_push}.get(
+                    sub, lambda a: sys.exit(f"unknown: workspace {sub}"))(rest)
+    if group == "project":
+        if not rest:
+            sys.exit("usage: project (list|show|pull|push) ...")
+        sub, rest = rest[0], rest[1:]
+        return {"list": project_list, "show": project_show,
+                "pull": project_pull, "push": project_push}.get(
+                    sub, lambda a: sys.exit(f"unknown: project {sub}"))(rest)
     if group == "runs":
         return runs(rest)
     if group == "status":
