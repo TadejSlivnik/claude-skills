@@ -1,6 +1,6 @@
 ---
 name: multica
-description: Read and drive a Multica cloud workspace — get issues and comments, create tasks with the right project/labels/priority, dispatch work to agents, push agent instructions and project/workspace context, cancel duplicate runs, and diagnose a stalled pipeline. Use when the user invokes /multica, pastes a multica.ai issue URL, names an issue key like WEBS-41, or says "create a task/issue in multica", "add a label to that task", "check that task", "why did this stall", "hand it to the Reviewer", "update the agent instructions", "is the runtime up".
+description: Read and drive a Multica cloud workspace — get issues and comments, create tasks with the right project/labels, dispatch work to agents, push agent instructions and project/workspace context, cancel duplicate runs, and diagnose a stalled pipeline. Use when the user invokes /multica, pastes a multica.ai issue URL, names an issue key like WEBS-41, or says "create a task/issue in multica", "add a label to that task", "check that task", "why did this stall", "hand it to the Reviewer", "update the agent instructions", "is the runtime up".
 ---
 
 # Multica
@@ -130,8 +130,10 @@ python3 scripts/multica.py project list    # the projects that exist
 python3 scripts/multica.py agents list     # who can be assigned
 ```
 
-Then present the full draft — title, project, labels, priority, assignee, parent/stage —
-and ask. Offer a recommendation per field, never a silent default. Infer nothing from
+Then present the full draft — title, project, labels, assignee, parent/stage — and ask.
+Offer a recommendation per field, never a silent default.
+**Do not ask about priority** — it is unimportant here. Omit `--priority` (the issue
+keeps the default `none`) unless the user names one themselves. Infer nothing from
 the working directory; a repo and a project share a name often enough to be dangerous.
 Create only once the user has answered.
 
@@ -148,14 +150,15 @@ production release.
 
 ```bash
 python3 scripts/multica.py issue create --title "..." --project mydash \
-  --label needs-design --label needs-plan-approval --priority high \
-  [--due 2026-10-20] [--parent WEBS-11] [--stage 3] \
+  --label needs-design --label needs-plan-approval \
+  [--priority high] [--due 2026-10-20] [--parent WEBS-11] [--stage 3] \
   [--description-file /tmp/body.md] [--assign Planner]
 ```
 
 `--label` repeats or takes a comma-separated list, and every name is resolved **before**
 the issue is created, so a typo fails with the list of real labels instead of leaving a
-half-configured issue behind. `--priority` is one of `none low medium high urgent`.
+half-configured issue behind. `--priority` (only when the user asks for one) is one of
+`none low medium high urgent`.
 `--project` takes a name or a UUID.
 
 **Order is the whole design.** The create body takes neither labels nor priority, so
