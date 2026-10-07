@@ -141,16 +141,16 @@ The one exception is an explicit spelled-out instruction ("create X in mydash, l
 needs-design, unassigned") — that is the answer already, so create it.
 
 **Labels in particular are gate config, not taxonomy.** In a squad workspace a label
-like `needs-design` or `skip-all-approvals` is what decides whether a human approves
+like `needs-design` or `skip-prod-approval` is what decides whether a human approves
 before shipping. Read each label's description back to the user rather than matching on
-its name — `skip-develop-approval` and `skip-all-approvals` sound alike and differ by a
+its name — `skip-dev-approval` and `skip-prod-approval` sound alike and differ by a
 production release.
 
 ### The command
 
 ```bash
 python3 scripts/multica.py issue create --title "..." --project mydash \
-  --label needs-design --label needs-plan-approval \
+  --label needs-design --label skip-dev-approval \
   [--priority high] [--due 2026-10-20] [--parent WEBS-11] [--stage 3] \
   [--description-file /tmp/body.md] [--assign Planner]
 ```
@@ -174,7 +174,7 @@ has to, then assigns.
 Labels on an existing issue:
 
 ```bash
-python3 scripts/multica.py issue label WEBS-41 --add needs-design --remove skip-all-approvals
+python3 scripts/multica.py issue label WEBS-41 --add needs-design --remove skip-prod-approval
 ```
 
 Neither call wakes an agent — labels are not a trigger. That cuts both ways: adding
