@@ -127,11 +127,13 @@ task, do not create it yet. First run both menus and **show the user the real op
 ```bash
 python3 scripts/multica.py labels          # names + what each one actually does
 python3 scripts/multica.py project list    # the projects that exist
-python3 scripts/multica.py agents list     # who can be assigned
 ```
 
 Then present the full draft — title, project, labels, assignee, parent/stage — and ask.
 Offer a recommendation per field, never a silent default.
+**The assignee has exactly two options: unassigned, or `Lead`.** Lead is the squad lead
+and routes the issue to every other agent itself, so never offer Planner, Builder or any
+other agent as a starting assignee, and don't list agents to build this menu.
 **Do not ask about priority** — it is unimportant here. Omit `--priority` (the issue
 keeps the default `none`) unless the user names one themselves. Infer nothing from
 the working directory; a repo and a project share a name often enough to be dangerous.
@@ -152,7 +154,7 @@ production release.
 python3 scripts/multica.py issue create --title "..." --project mydash \
   --label needs-design --label skip-dev-approval \
   [--priority high] [--due 2026-10-20] [--parent WEBS-11] [--stage 3] \
-  [--description-file /tmp/body.md] [--assign Planner]
+  [--description-file /tmp/body.md] [--assign Lead]
 ```
 
 `--label` repeats or takes a comma-separated list, and every name is resolved **before**
