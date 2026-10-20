@@ -102,8 +102,7 @@ project's CLAUDE.md. If the user only wanted to *see* it, stop at the brief.
 
 ## Writes — `task create`, `doc create`
 
-Compose title + markdown body in `clickup-format` style: self-contained, no
-conversational filler, tables for structured decisions, `- [ ]` for acceptance
+Compose title + markdown body: self-contained, no conversational filler, tables for structured decisions, `- [ ]` for acceptance
 criteria. Write the body to a temp file (`/tmp/clickup_*.md`), then run the
 create directly (no `--dry-run`, no confirmation prompt):
 
@@ -171,6 +170,5 @@ user has asked for the task/doc, just create it.
 - Never print or log the token.
 - When the user asks to create or update a task/doc, do it directly — don't ask for confirmation first.
 - When in doubt about which profile, list, or parent to use, **ask**.
-- `clickup-format` produces text the user pastes by hand; `clickup create` pushes
-  via the API. Use create when the user wants it filed; format when they want to
-  paste it themselves.
+- When the user wants text to paste into ClickUp by hand rather than a filed
+  task/doc, output the composed markdown instead of running `create`.
