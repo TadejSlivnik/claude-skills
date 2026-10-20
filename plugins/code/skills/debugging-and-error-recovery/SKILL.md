@@ -1,6 +1,6 @@
 ---
 name: debugging-and-error-recovery
-description: Guides systematic root-cause debugging. Use when tests fail, builds break, behavior doesn't match expectations, or you encounter any unexpected error. Use when you need a systematic approach to finding and fixing the root cause rather than guessing.
+description: Guides systematic root-cause debugging. Use when tests fail, builds break, something that worked yesterday broke, behavior doesn't match expectations, or you encounter any unexpected error. Use when you need to figure out what broke and why — a systematic approach to finding and fixing the root cause rather than guessing.
 ---
 
 # Debugging and Error Recovery
@@ -31,7 +31,7 @@ When anything unexpected happens:
 6. RESUME only after verification passes
 ```
 
-**Don't push past a failing test or broken build to work on the next feature.** Errors compound. A bug in Step 3 that goes unfixed makes Steps 4-10 wrong.
+**Don't push past a failing test or broken build to work on the next feature.** Errors compound. A bug in Step 3 that goes unfixed makes Steps 4-6 wrong.
 
 ## The Triage Checklist
 
@@ -56,11 +56,11 @@ Can you reproduce the failure?
 Cannot reproduce on demand:
 ├── Timing-dependent?
 │   ├── Add timestamps to logs around the suspected area
-│   ├── Try with artificial delays (sleep) to widen race windows
+│   ├── Try with artificial delays (setTimeout, sleep) to widen race windows
 │   └── Run under load or concurrency to increase collision probability
 ├── Environment-dependent?
-│   ├── Compare runtime/language versions, OS, environment variables
-│   ├── Check for differences in data (empty vs populated store)
+│   ├── Compare Node/browser versions, OS, environment variables
+│   ├── Check for differences in data (empty vs populated database)
 │   └── Try reproducing in CI where the environment is clean
 ├── State-dependent?
 │   ├── Check for leaked state between tests or requests
@@ -72,12 +72,16 @@ Cannot reproduce on demand:
     └── Document the conditions observed and revisit when it recurs
 ```
 
-For test failures, use your test runner's flags to:
-```
-# Run just the specific failing test (by name or file)
-# Run with verbose/detailed output
-# Run it in isolation, in a single process (rules out test pollution
-#   from shared state or test ordering)
+For test failures (npm shown — substitute the repository's own test command; check the manifest, a `Makefile`, or CI config for what it actually uses):
+```bash
+# Run the specific failing test
+npm test -- --grep "test name"
+
+# Run with verbose output
+npm test -- --verbose
+
+# Run in isolation (rules out test pollution)
+npm test -- --testPathPattern="specific-file" --runInBand
 ```
 
 ### Step 2: Localize
@@ -86,9 +90,9 @@ Narrow down WHERE the failure happens:
 
 ```
 Which layer is failing?
-├── UI/Frontend     → Check client logs, rendered output, network traffic
+├── UI/Frontend     → Check console, DOM, network tab
 ├── API/Backend     → Check server logs, request/response
-├── Data store      → Check queries, schema, data integrity
+├── Database        → Check queries, schema, data integrity
 ├── Build tooling   → Check config, dependencies, environment
 ├── External service → Check connectivity, API changes, rate limits
 └── Test itself     → Check if the test is correct (false negative)
@@ -101,7 +105,7 @@ git bisect start
 git bisect bad                    # Current commit is broken
 git bisect good <known-good-sha> # This commit worked
 # Git will checkout midpoint commits; run your test at each
-git bisect run <your-test-command>
+git bisect run npm test -- --grep "failing test"  # substitute the repository's focused-test command
 ```
 
 ### Step 3: Reduce
@@ -135,26 +139,34 @@ Ask: "Why does this happen?" until you reach the actual cause, not just where it
 
 Write a test that catches this specific failure:
 
-```
-# The bug: task titles with special characters broke the search
-test "finds tasks with special characters in title":
-    createTask(title = 'Fix "quotes" & <brackets>')
-    results = searchTasks("quotes")
-    assert results.length == 1
-    assert results[0].title == 'Fix "quotes" & <brackets>'
+```typescript
+// The bug: task titles with special characters broke the search
+it('finds tasks with special characters in title', async () => {
+  await createTask({ title: 'Fix "quotes" & <brackets>' });
+  const results = await searchTasks('quotes');
+  expect(results).toHaveLength(1);
+  expect(results[0].title).toBe('Fix "quotes" & <brackets>');
+});
 ```
 
 This test will prevent the same bug from recurring. It should fail without the fix and pass with it.
 
 ### Step 6: Verify End-to-End
 
-After fixing, verify the complete scenario using your project's commands:
+After fixing, verify the complete scenario with the repository's own commands (npm shown):
 
-```
-# Run the specific test that reproduces the bug
+```bash
+# Run the specific test
+npm test -- --grep "specific test"
+
 # Run the full test suite (check for regressions)
-# Build/compile the project (check for type/compilation errors)
-# Manual spot check if applicable (run the app and exercise the scenario)
+npm test
+
+# Build the project (check for type/compilation errors)
+npm run build
+
+# Manual spot check if applicable
+npm run dev  # Verify in browser
 ```
 
 ## Error-Specific Patterns
@@ -188,13 +200,13 @@ Build fails:
 
 ```
 Runtime error:
-├── Null/undefined access (e.g. reading a field of a missing value)
-│   └── Something is null/missing that shouldn't be
+├── TypeError: Cannot read property 'x' of undefined
+│   └── Something is null/undefined that shouldn't be
 │       → Check data flow: where does this value come from?
-├── Network error / connectivity / cross-origin
-│   └── Check URLs, headers, server-side connection/permission config
-├── Crash on output / blank result
-│   └── Check error handling, logs, the render/output path
+├── Network error / CORS
+│   └── Check URLs, headers, server CORS config
+├── Render error / White screen
+│   └── Check error boundary, console, component tree
 └── Unexpected behavior (no error)
     └── Add logging at key points, verify data at each step
 ```
@@ -203,24 +215,29 @@ Runtime error:
 
 When under time pressure, use safe fallbacks:
 
-```
-# Safe default + warning (instead of crashing)
-function getConfig(key):
-    value = environment[key]
-    if value is missing:
-        warn("Missing config: " + key + ", using default")
-        return DEFAULTS[key] if present else ""
-    return value
+```typescript
+// Safe default + warning (instead of crashing)
+function getConfig(key: string): string {
+  const value = process.env[key];
+  if (!value) {
+    console.warn(`Missing config: ${key}, using default`);
+    return DEFAULTS[key] ?? '';
+  }
+  return value;
+}
 
-# Graceful degradation (instead of a broken feature)
-function renderChart(data):
-    if data is empty:
-        return emptyState("No data available for this period")
-    try:
-        return chart(data)
-    catch error:
-        logError("Chart render failed:", error)
-        return errorState("Unable to display chart")
+// Graceful degradation (instead of broken feature)
+function renderChart(data: ChartData[]) {
+  if (data.length === 0) {
+    return <EmptyState message="No data available for this period" />;
+  }
+  try {
+    return <Chart data={data} />;
+  } catch (error) {
+    console.error('Chart render failed:', error);
+    return <ErrorState message="Unable to display chart" />;
+  }
+}
 ```
 
 ## Instrumentation Guidelines
@@ -238,7 +255,7 @@ Add logging only when it helps. Remove it when done.
 - It contains sensitive data (always remove these)
 
 **Permanent instrumentation (keep):**
-- Top-level error handlers with error reporting
+- Error boundaries with error reporting
 - API error logging with request context
 - Performance metrics at key user flows
 

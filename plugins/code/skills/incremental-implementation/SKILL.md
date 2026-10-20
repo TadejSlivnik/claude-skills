@@ -1,6 +1,6 @@
 ---
 name: incremental-implementation
-description: Delivers changes incrementally. Use when implementing any feature or change that touches more than one file. Use when you're about to write a large amount of code at once, or when a task feels too big to land in one step.
+description: Delivers changes incrementally in thin, verifiable slices. Use when implementing any feature or change that touches more than one file, or when picking up the next task from a plan. Use when rolling a change out behind a feature flag, when you're about to write a large amount of code at once, or when a task feels too big to land in one step.
 ---
 
 # Incremental Implementation
@@ -68,7 +68,7 @@ Each slice delivers working end-to-end functionality.
 When backend and frontend need to develop in parallel:
 
 ```
-Slice 0: Define the API contract (types, interfaces, schema/IDL)
+Slice 0: Define the API contract (types, interfaces, OpenAPI spec)
 Slice 1a: Implement backend against the contract + API tests
 Slice 1b: Implement frontend against mock data matching the contract
 Slice 2: Integrate and test end-to-end
@@ -148,12 +148,13 @@ After each increment, the project must build and existing tests must pass. Don't
 
 If a feature isn't ready for users but you need to merge increments:
 
-```
-# Feature flag for work-in-progress, read from config/environment
-ENABLE_TASK_SHARING = config["FEATURE_TASK_SHARING"] == true
+```typescript
+// Feature flag for work-in-progress
+const ENABLE_TASK_SHARING = process.env.FEATURE_TASK_SHARING === 'true';
 
-if ENABLE_TASK_SHARING:
-    # New sharing behavior, hidden until the flag is on
+if (ENABLE_TASK_SHARING) {
+  // New sharing UI
+}
 ```
 
 This lets you merge small increments to the main branch without exposing incomplete work.
@@ -162,11 +163,12 @@ This lets you merge small increments to the main branch without exposing incompl
 
 New code should default to safe, conservative behavior:
 
-```
-# Safe: potentially disruptive behavior is disabled by default, opt-in
-function createTask(data, options):
-    shouldNotify = options.notify if provided else false
-    # ...
+```typescript
+// Safe: disabled by default, opt-in
+export function createTask(data: TaskInput, options?: { notify?: boolean }) {
+  const shouldNotify = options?.notify ?? false;
+  // ...
+}
 ```
 
 ### Rule 5: Rollback-Friendly
@@ -188,25 +190,23 @@ When directing an agent to implement incrementally:
 Start with just the database schema change and the API endpoint.
 Don't touch the UI yet — we'll do that in the next increment.
 
-After implementing, run the project's test and build commands to verify
-nothing is broken."
+After implementing, run the repository's test and build commands to
+verify nothing is broken."
 ```
 
 Be explicit about what's in scope and what's NOT in scope for each increment.
 
 ## Increment Checklist
 
-After each increment, verify:
+After each increment, verify with the repository's own commands (check the manifest, a `Makefile`, or CI config for what it actually uses):
 
 - [ ] The change does one thing and does it completely
-- [ ] All existing tests still pass
-- [ ] The build/compile step succeeds
-- [ ] Static checks pass (type checking, if the language has it)
-- [ ] Linting / formatting passes
+- [ ] All existing tests still pass (the repository's test command: `npm test`, `./gradlew test`, `pytest`, ...)
+- [ ] The build succeeds (the repository's build command)
+- [ ] Type checking passes, where the stack has one (`npx tsc --noEmit`, `mypy`, ...)
+- [ ] Linting passes (the repository's lint command)
 - [ ] The new functionality works as expected
 - [ ] The change is committed with a descriptive message
-
-Use whatever commands your project provides for each step (test runner, build tool, type checker, linter).
 
 **Note:** Run each verification command after a change that could affect it. After a successful run, don't repeat the same command unless the code has changed since — re-running on unchanged code adds no information.
 

@@ -1,24 +1,17 @@
-# Testing Patterns Reference
+# Testing Patterns Reference (JavaScript/TypeScript)
 
-Quick reference for common testing patterns across the stack. Use alongside the `test-driven-development` skill.
-
-The *patterns* here — Arrange-Act-Assert, behavior-focused naming, mocking only at boundaries, the anti-patterns — are universal and apply in any language or test runner. The *snippets* use a JavaScript toolchain (Jest/Vitest matchers, Testing Library, supertest, Playwright) because it's compact and widely readable. Each section notes the equivalent elsewhere: matcher APIs map to pytest/JUnit/RSpec/Go's `testing`; Testing Library ships for React, Vue, Svelte, and Angular with the same query-by-accessible-role philosophy; E2E concepts carry over to Cypress, Selenium, etc. Use whatever your stack provides — the structure stays the same.
+Quick reference of JavaScript/TypeScript testing patterns — Jest, React Testing Library, Supertest, and Playwright — illustrating the universal principles from the `test-driven-development` skill. The principles (Arrange-Act-Assert, naming, mock discipline, anti-patterns) apply in any ecosystem; the syntax and tooling shown here are JS/TS-specific. In another stack, follow the same principles with the repository's own test framework and commands.
 
 ## Table of Contents
 
-- [Testing Patterns Reference](#testing-patterns-reference)
-  - [Table of Contents](#table-of-contents)
-  - [Test Structure (Arrange-Act-Assert)](#test-structure-arrange-act-assert)
-  - [Test Naming Conventions](#test-naming-conventions)
-  - [Common Assertions](#common-assertions)
-  - [Mocking Patterns](#mocking-patterns)
-    - [Mock Functions](#mock-functions)
-    - [Mock Modules](#mock-modules)
-    - [Mock at Boundaries Only](#mock-at-boundaries-only)
-  - [Component Testing](#component-testing)
-  - [API / Integration Testing](#api--integration-testing)
-  - [E2E Testing](#e2e-testing)
-  - [Test Anti-Patterns](#test-anti-patterns)
+- [Test Structure (Arrange-Act-Assert)](#test-structure-arrange-act-assert)
+- [Test Naming Conventions](#test-naming-conventions)
+- [Common Assertions](#common-assertions)
+- [Mocking Patterns](#mocking-patterns)
+- [React/Component Testing](#reactcomponent-testing)
+- [API / Integration Testing](#api--integration-testing)
+- [E2E Testing (Playwright)](#e2e-testing-playwright)
+- [Test Anti-Patterns](#test-anti-patterns)
 
 ## Test Structure (Arrange-Act-Assert)
 
@@ -50,8 +43,6 @@ describe('TaskService.createTask', () => {
 ```
 
 ## Common Assertions
-
-Jest/Vitest matchers shown — the *kinds* of assertion (equality, truthiness, numeric, string, collection, error, async) exist in every framework; only the spelling differs (pytest `assert`, JUnit `assertEquals`/AssertJ, RSpec `expect().to eq`, Go `if got != want`).
 
 ```typescript
 // Equality
@@ -92,8 +83,6 @@ await expect(asyncFn()).rejects.toThrow(Error);
 
 ## Mocking Patterns
 
-Jest API shown (`jest.*`); Vitest is identical with `vi.*`, and other ecosystems have direct analogues (Python `unittest.mock`/`pytest-mock`, Java Mockito, Ruby RSpec mocks, Go testify/mock or hand-written interfaces). The principle — fake the dependency, assert on the interaction — is the same everywhere.
-
 ### Mock Functions
 
 ```typescript
@@ -133,9 +122,7 @@ Mock these:                    Don't mock these:
 └── Time/Date (when needed)    └── Pure functions
 ```
 
-## Component Testing
-
-Testing Library shown for React (`@testing-library/react`); the same API and philosophy ship as `@testing-library/vue`, `-svelte`, and `-angular`. The golden rule is framework-independent: **query by accessible role/label, not by test IDs or CSS selectors** — your test then exercises the UI the way a user (and assistive tech) does.
+## React/Component Testing
 
 ```tsx
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -168,8 +155,6 @@ describe('TaskForm', () => {
 ```
 
 ## API / Integration Testing
-
-Drive the app through real HTTP and assert on status + body (supertest against an Express app shown). The pattern is server-framework-agnostic — use any in-process test client or HTTP library (FastAPI `TestClient`, Spring `MockMvc`, Rails integration tests, Go `httptest`, or a plain HTTP client against a running instance).
 
 ```typescript
 import request from 'supertest';
@@ -209,9 +194,7 @@ describe('POST /api/tasks', () => {
 });
 ```
 
-## E2E Testing
-
-Playwright shown; Cypress, Selenium/WebDriver, and others express the same flow. Whatever the tool, the principle holds: **drive the real browser and locate elements by user-visible text / accessible attributes, not brittle CSS or XPath.**
+## E2E Testing (Playwright)
 
 ```typescript
 import { test, expect } from '@playwright/test';
@@ -219,35 +202,34 @@ import { test, expect } from '@playwright/test';
 test('user can create and complete a task', async ({ page }) => {
   // Navigate and authenticate
   await page.goto('/');
-  await page.fill('[name="email"]', 'test@example.com');
-  await page.fill('[name="password"]', 'testpass123');
-  await page.click('button:has-text("Log in")');
+  await page.getByRole('textbox', { name: /email/i }).fill('test@example.com');
+  await page.getByLabel(/password/i).fill('testpass123');
+  await page.getByRole('button', { name: /log in/i }).click();
 
   // Create a task
-  await page.click('button:has-text("New Task")');
-  await page.fill('[name="title"]', 'Buy groceries');
-  await page.click('button:has-text("Create")');
+  await page.getByRole('button', { name: /new task/i }).click();
+  await page.getByRole('textbox', { name: /title/i }).fill('Buy groceries');
+  await page.getByRole('button', { name: /create/i }).click();
 
   // Verify task appears
-  await expect(page.locator('text=Buy groceries')).toBeVisible();
+  const task = page.getByRole('listitem', { name: /buy groceries/i });
+  await expect(task).toBeVisible();
 
   // Complete the task
-  await page.click('[aria-label="Complete Buy groceries"]');
-  await expect(page.locator('text=Buy groceries')).toHaveCSS(
-    'text-decoration-line', 'line-through'
-  );
+  await task.getByRole('checkbox', { name: /complete buy groceries/i }).check();
+  await expect(task).toHaveCSS('text-decoration-line', 'line-through');
 });
 ```
 
 ## Test Anti-Patterns
 
-| Anti-Pattern                   | Problem                        | Better Approach            |
-| ------------------------------ | ------------------------------ | -------------------------- |
-| Testing implementation details | Breaks on refactor             | Test inputs/outputs        |
-| Snapshot everything            | No one reviews snapshot diffs  | Assert specific values     |
-| Shared mutable state           | Tests pollute each other       | Setup/teardown per test    |
-| Testing third-party code       | Wastes time, not your bug      | Mock the boundary          |
-| Skipping tests to pass CI      | Hides real bugs                | Fix or delete the test     |
-| Using `test.skip` permanently  | Dead code                      | Remove or fix it           |
-| Overly broad assertions        | Doesn't catch regressions      | Be specific                |
-| No async error handling        | Swallowed errors, false passes | Always `await` async tests |
+| Anti-Pattern | Problem | Better Approach |
+|---|---|---|
+| Testing implementation details | Breaks on refactor | Test inputs/outputs |
+| Snapshot everything | No one reviews snapshot diffs | Assert specific values |
+| Shared mutable state | Tests pollute each other | Setup/teardown per test |
+| Testing third-party code | Wastes time, not your bug | Mock the boundary |
+| Skipping tests to pass CI | Hides real bugs | Fix or delete the test |
+| Using `test.skip` permanently | Dead code | Remove or fix it |
+| Overly broad assertions | Doesn't catch regressions | Be specific |
+| No async error handling | Swallowed errors, false passes | Always `await` async tests |
