@@ -29,7 +29,7 @@ The TDD cycle is universal; the commands are not. Before writing the first test,
 - **Checked-in wrappers** — prefer `./gradlew`, `./mvnw`, `make test`, or a repo script over globally installed tools
 - **Test framework and configuration** — and how it runs a single focused test vs the full suite
 - **Existing conventions** — where tests live, how files are named, what patterns neighboring tests follow
-- **Documented commands** — README, CONTRIBUTING, and CI workflows show the commands that actually gate merges
+- **Documented commands** — agent rules files (`CLAUDE.md`, `AGENTS.md`), README, CONTRIBUTING, and CI workflows show the commands that actually gate merges
 
 Run the repository's focused-test command during the loop and its full-suite command before completion. Never assume a default like `npm test` — a Gradle, Cargo, or pytest project has its own equivalent.
 
