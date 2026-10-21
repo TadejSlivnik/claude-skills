@@ -183,6 +183,25 @@ Neither call wakes an agent — labels are not a trigger. That cuts both ways: a
 `needs-design` to an issue an agent is already working does **not** make it re-read the
 gate. Comment to wake it.
 
+### Designs go on the issue, never as an artifact link
+
+**Never put a claude.ai artifact link in an issue** — not a design canvas, not a page,
+not "see the mockup here". Agents run on a runtime with no claude.ai session, so the
+link opens nothing for them, and an artifact can be deleted or unshared later, which
+leaves the issue pointing at nothing. Whatever the agent needs has to live on the
+issue itself:
+
+- **Images** — render the approved screens (one per state that matters: each tab, open
+  and closed, light and dark) and upload them to the issue, then embed each one in the
+  description with its `markdown_url`.
+- **HTML** — when the interaction matters more than a still, upload the page as a file.
+  It must open on its own: inline its CSS and scripts, and no `/_blob/...` or other
+  artifact-hosted URL inside it.
+
+Then write the description so it stands without the pictures: what each image shows,
+and which data in it is sample data. Upload and embed **before** assigning — the agent
+reads the description once, when it wakes.
+
 ## Pushing agent instructions
 
 ```bash
@@ -326,6 +345,13 @@ points. These were established by probing a live workspace:
 - There is no members/users endpoint (`/members`, `/users`, `/workspace-members` are all
   404), so **a human assignee cannot be resolved by name.** `--assign` therefore only
   takes agents. Assigning a task to a person is a UI job.
+- **Attachments upload via `POST /upload-file`**, multipart, with a `file` part and an
+  `issue_id` part. It returns the attachment with a `markdown_url`
+  (`/api/attachments/<id>/download`) to embed as `![alt](markdown_url)`. List an issue's
+  attachments with `GET /issues/{id}/attachments`; `POST` on that path is 405, and
+  `/attachments`, `/upload` and `/files` are 404. Verified with PNGs; HTML is untested.
+  Editing the description to embed them is `PUT /issues/{id} {"description": ...}`, which
+  wakes nobody.
 
 ## Rules
 
