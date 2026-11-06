@@ -15,10 +15,12 @@ Usage:
   multica.py agents list [--profile p]
   multica.py agents push [Name ...] [--profile p] [--dry-run]
   multica.py workspace show [--profile p]
-  multica.py workspace (pull|push) [--profile p] [--dry-run] [--force]
+  multica.py workspace pull [--profile p] [--force]
+  multica.py workspace push [--profile p] [--dry-run]
   multica.py project list [--profile p]
   multica.py project show <name> [--profile p]
-  multica.py project (pull|push) [name ...] [--profile p] [--dry-run] [--force]
+  multica.py project pull [name ...] [--profile p] [--force]
+  multica.py project push [name ...] [--profile p] [--dry-run]
   multica.py runs [--agent Name] [--failed] [--limit N] [--profile p]
   multica.py runs cancel <task-id> [--profile p]
   multica.py status [--hours N] [--profile p]
@@ -104,7 +106,7 @@ def api_base(prof):
     return (prof.get("api_base") or DEFAULT_API).rstrip("/")
 
 
-def http(path, prof, body=None, method=None):
+def http(path, prof, body=None, method=None, missing_ok=False):
     url = path if path.startswith("http") else api_base(prof) + path
     headers = {"Authorization": "Bearer " + prof["token"]}
     if prof.get("workspace_id"):
@@ -121,17 +123,26 @@ def http(path, prof, body=None, method=None):
             raw = r.read().decode("utf-8")
             return json.loads(raw) if raw.strip() else {}
     except urllib.error.HTTPError as e:
+        if missing_ok and e.code == 404:
+            return None
         detail = e.read().decode("utf-8", "replace")[:500]
         sys.exit(f"ERROR: {method} {url} -> HTTP {e.code}\n{detail}")
     except urllib.error.URLError as e:
         sys.exit(f"ERROR: {method} {url} -> {e.reason}")
 
 
-def parse_flags(argv):
-    """--key value / --flag -> (positionals, {key: value|True})."""
+def parse_flags(argv, allowed):
+    """--key value / --flag -> (positionals, {key: value|True}).
+
+    `allowed` is every flag the command reads. Anything else exits instead of being
+    ignored: `agents push --help` used to drop the flag and push every agent.
+    """
     pos, flags, i = [], {}, 0
     while i < len(argv):
         a = argv[i]
+        if a.startswith("-") and a[2:] not in allowed:
+            sys.exit(f"ERROR: unknown flag {a}. This command takes: "
+                     + (", ".join("--" + f for f in sorted(allowed)) or "no flags"))
         if a.startswith("--"):
             key = a[2:]
             if i + 1 < len(argv) and not argv[i + 1].startswith("--"):
@@ -206,11 +217,6 @@ UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 KEY_RE = re.compile(r"\b([A-Z][A-Z0-9]*-\d+)\b")
 
 
-def all_issues(prof, limit=200):
-    d = http(f"/issues?limit={limit}", prof)
-    return d.get("issues", d.get("data", d)) if isinstance(d, dict) else d
-
-
 def resolve_issue(ref, prof):
     """Accept a UUID, a WEBS-41 key, or an issue URL from any host.
 
@@ -224,11 +230,13 @@ def resolve_issue(ref, prof):
     if not m:
         sys.exit(f"ERROR: cannot parse an issue key or id from '{ref}'")
     key = m.group(1)
-    for i in all_issues(prof):
-        if i.get("identifier") == key:
-            d = http(f"/issues/{i['id']}", prof)
-            return d.get("issue", d)
-    sys.exit(f"ERROR: no issue '{key}' in this workspace (searched the 200 most recent)")
+    # /issues/<KEY> resolves a key directly. The list endpoint is not ordered by number,
+    # so scanning its first page missed issues as new as PROJ-3946.
+    d = http(f"/issues/{key}", prof, missing_ok=True)
+    issue = d.get("issue", d) if isinstance(d, dict) else None
+    if not issue or issue.get("identifier") != key:
+        sys.exit(f"ERROR: no issue '{key}' in this workspace")
+    return issue
 
 
 def all_agents(prof):
@@ -252,7 +260,7 @@ def comments_of(issue_id, prof):
 # ---- issue commands --------------------------------------------------------
 
 def issue_get(argv):
-    pos, flags = parse_flags(argv)
+    pos, flags = parse_flags(argv, {"comments", "json", "profile"})
     if not pos:
         sys.exit("usage: issue get <KEY|url|id> [profile] [--comments N]")
     prof = resolve_profile(flags.get("profile") or (pos[1] if len(pos) > 1 else None))
@@ -281,7 +289,7 @@ def issue_get(argv):
 
 
 def issue_comment(argv):
-    pos, flags = parse_flags(argv)
+    pos, flags = parse_flags(argv, {"file", "text", "profile"})
     if not pos:
         sys.exit("usage: issue comment <KEY|url|id> (--file path | --text \"...\")")
     prof = resolve_profile(flags.get("profile"))
@@ -308,7 +316,7 @@ def warn_if_agent_assigned(issue, prof):
 
 def issue_dispatch(argv):
     """The safe handoff: comment first, then assign exactly once."""
-    pos, flags = parse_flags(argv)
+    pos, flags = parse_flags(argv, {"to", "comment-file", "force", "dry-run", "profile"})
     if not pos or not flags.get("to"):
         sys.exit("usage: issue dispatch <KEY|url|id> --to <AgentName> [--comment-file path]")
     prof = resolve_profile(flags.get("profile"))
@@ -374,7 +382,9 @@ def issue_create(argv):
     the run. An agent that wakes to an unlabelled issue has already read the
     wrong gate config by the time the label arrives.
     """
-    pos, flags = parse_flags(argv)
+    pos, flags = parse_flags(argv, {"title", "project", "label", "priority", "due", "parent", "stage",
+                                    "description", "description-file", "status", "assign",
+                                    "profile"})
     if not flags.get("title"):
         sys.exit('usage: issue create --title "..." [--project x] [--label l ...] '
                  "[--priority p] [--due YYYY-MM-DD] [--parent KEY] [--stage N] "
@@ -440,7 +450,7 @@ def issue_create(argv):
 
 def issue_label(argv):
     """Add or remove labels on an existing issue. Neither call wakes an agent."""
-    pos, flags = parse_flags(argv)
+    pos, flags = parse_flags(argv, {"add", "remove", "profile"})
     if not pos:
         sys.exit('usage: issue label <KEY> [--add l ...] [--remove l ...]')
     prof = resolve_profile(flags.get("profile"))
@@ -480,7 +490,7 @@ def resolve_label(ref, prof):
 
 def labels_list(argv):
     """The menu to offer before creating anything — names, colours and meaning."""
-    _, flags = parse_flags(argv)
+    _, flags = parse_flags(argv, {"json", "profile"})
     prof = resolve_profile(flags.get("profile"))
     labels = all_labels(prof)
     if flags.get("json"):
@@ -518,7 +528,7 @@ def agents_dir(prof):
 
 
 def agents_list(argv):
-    _, flags = parse_flags(argv)
+    _, flags = parse_flags(argv, {"profile"})
     prof = resolve_profile(flags.get("profile"))
     for a in all_agents(prof):
         print(f"{a['name']:<12} {a.get('model'):<18} {a['id']}")
@@ -532,7 +542,7 @@ def agents_push(argv):
     into every brief, so prepending them here would ship them twice. Agent ids are
     resolved by name at call time, never cached.
     """
-    names, flags = parse_flags(argv)
+    names, flags = parse_flags(argv, {"dry-run", "profile"})
     prof = resolve_profile(flags.get("profile"))
     d = agents_dir(prof)
 
@@ -678,7 +688,7 @@ def _write_local(path, text):
 # --- workspace ---
 
 def workspace_show(argv):
-    _, flags = parse_flags(argv)
+    _, flags = parse_flags(argv, {"profile"})
     prof = resolve_profile(flags.get("profile"))
     w = get_workspace(prof)
     ctx = (w.get("context") or "").strip()
@@ -689,7 +699,7 @@ def workspace_show(argv):
 
 
 def workspace_pull(argv):
-    _, flags = parse_flags(argv)
+    _, flags = parse_flags(argv, {"force", "profile"})
     prof = resolve_profile(flags.get("profile"))
     ctx = (get_workspace(prof).get("context") or "").strip()
     path = workspace_file(prof, create=True)
@@ -707,7 +717,7 @@ def workspace_pull(argv):
 
 
 def workspace_push(argv):
-    _, flags = parse_flags(argv)
+    _, flags = parse_flags(argv, {"dry-run", "profile"})
     prof = resolve_profile(flags.get("profile"))
     path = workspace_file(prof)
     if not os.path.exists(path):
@@ -733,7 +743,7 @@ def workspace_push(argv):
 # --- projects ---
 
 def project_list(argv):
-    _, flags = parse_flags(argv)
+    _, flags = parse_flags(argv, {"profile"})
     prof = resolve_profile(flags.get("profile"))
     d = os.path.join(context_dir(prof, create=True), "projects")
     for p in _wanted_projects([], prof):
@@ -749,7 +759,7 @@ def project_list(argv):
 
 
 def project_show(argv):
-    names, flags = parse_flags(argv)
+    names, flags = parse_flags(argv, {"profile"})
     if not names:
         sys.exit("usage: project show <name>")
     prof = resolve_profile(flags.get("profile"))
@@ -766,7 +776,7 @@ def project_show(argv):
 
 
 def project_pull(argv):
-    names, flags = parse_flags(argv)
+    names, flags = parse_flags(argv, {"force", "profile"})
     prof = resolve_profile(flags.get("profile"))
     d = projects_dir(prof, must_exist=False)
     os.makedirs(d, exist_ok=True)
@@ -790,7 +800,7 @@ def project_pull(argv):
 
 
 def project_push(argv):
-    names, flags = parse_flags(argv)
+    names, flags = parse_flags(argv, {"dry-run", "profile"})
     prof = resolve_profile(flags.get("profile"))
     d = projects_dir(prof)
     rc = 0
@@ -823,7 +833,7 @@ def project_push(argv):
 # ---- run commands ----------------------------------------------------------
 
 def runs(argv):
-    pos, flags = parse_flags(argv)
+    pos, flags = parse_flags(argv, {"agent", "failed", "limit", "profile"})
     if pos and pos[0] == "cancel":
         return runs_cancel(pos[1:], flags)
     prof = resolve_profile(flags.get("profile"))
@@ -857,7 +867,7 @@ def runs_cancel(pos, flags):
 
 def status(argv):
     """One-shot health check: runtime online, CLI version, recent failures."""
-    _, flags = parse_flags(argv)
+    _, flags = parse_flags(argv, {"hours", "profile"})
     prof = resolve_profile(flags.get("profile"))
     hours = int(flags.get("hours", 24))
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
@@ -910,7 +920,7 @@ def cmd_profiles():
 
 def main():
     argv = sys.argv[1:]
-    if not argv or argv[0] in ("-h", "--help", "help"):
+    if not argv or argv[0] == "help" or "-h" in argv or "--help" in argv:
         print(__doc__)
         return
     group, rest = argv[0], argv[1:]
