@@ -209,6 +209,9 @@ python3 scripts/multica.py agents push              # every agent file in agents
 python3 scripts/multica.py agents push reviewer auditor
 ```
 
+A file matches its agent by name, ignoring case, with hyphens for spaces
+(`night-dispatcher.md` is "Night Dispatcher"). `--dry-run` compares the full text.
+
 Each agent's Instructions = `<agent>.md`, verbatim, uploaded via `PUT /agents/{id}`,
 then **read back and compared** — this API returns 200 for fields it silently drops, so
 a 200 alone proves nothing.

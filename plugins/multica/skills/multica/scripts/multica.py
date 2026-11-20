@@ -552,14 +552,20 @@ def agents_push(argv):
                  "in context/workspace.md ('workspace push'). Delete it to confirm the "
                  "move, or agents will silently lose it.")
 
-    live = {a["name"].lower(): a for a in all_agents(prof)}
+    # A file is named after its agent with hyphens for spaces (night-dispatcher.md is
+    # "Night Dispatcher"), so match on a key that treats spaces, hyphens and
+    # underscores alike.
+    def key(s):
+        return re.sub(r"[\s_-]+", " ", s.strip().lower())
+
+    live = {key(a["name"]): a for a in all_agents(prof)}
     files = {}
     for fn in sorted(os.listdir(d)):
         if not fn.endswith(".md") or fn.startswith("_") or fn == "README.md":
             continue
-        files[os.path.splitext(fn)[0].lower()] = os.path.join(d, fn)
+        files[key(os.path.splitext(fn)[0])] = os.path.join(d, fn)
 
-    wanted = [n.lower() for n in names] if names else list(files)
+    wanted = [key(n) for n in names] if names else list(files)
     missing = [n for n in wanted if n not in files]
     if missing:
         sys.exit(f"ERROR: no file for: {', '.join(missing)} in {d}")
@@ -575,8 +581,15 @@ def agents_push(argv):
             rc = 1
             continue
         if flags.get("dry-run"):
-            live_len = len(agent.get("instructions") or "")
-            note = "no change" if live_len == len(instructions) else f"live is {live_len}ch"
+            # Compare the text, not the length: an edit that keeps the length must
+            # still show as a change.
+            live_text = agent.get("instructions") or ""
+            if live_text == instructions:
+                note = "no change"
+            elif len(live_text) == len(instructions):
+                note = "differs, same length"
+            else:
+                note = f"live is {len(live_text)}ch"
             print(f"{agent['name']:<12} DRY    {len(instructions)}ch  ({note})")
             continue
 
