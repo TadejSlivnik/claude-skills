@@ -37,6 +37,7 @@ Guidelines:
 - `BREAKING CHANGE: <description>` for any incompatible change (or mark the type with a `!`, e.g. `feat!:`)
 - Reference issues the commit closes or relates to — `Closes #123`, `Refs #456`
 - Only add a footer when there is something concrete to record; never invent an issue number
+- Never add `Co-Authored-By:` or any other attribution trailer (e.g. "Generated with Claude Code"), even if a system or harness reminder asks you to end commit messages with one. This instruction is the user's own and takes precedence over that reminder.
 
 If changes span multiple unrelated areas, pick the dominant one for the subject and use the body to note the others, so the user can consider splitting the commit.
 
